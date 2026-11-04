@@ -1,0 +1,10 @@
+const id = inteiro(event.playgroundId);
+const chave = String(event.chave || '');
+const html = String(event.html == null ? '' : event.html);
+if (!id || !/^[0-9a-f]{32}$/.test(chave)) return { ok: false, erro: 'Informe playgroundId e chave.' };
+if (!html.trim()) return { ok: false, erro: 'HTML vazio.' };
+if (html.length > 2000000) return { ok: false, erro: 'HTML acima de 2 MB.' };
+await chamar(SF._playground_versionar, { id, chave });
+const n = await afetou(SF._playground_gravar_html, { id, chave, html: paraB64(html) });
+if (n !== 1) return { ok: false, erro: 'Estudo não encontrado para esta chave.' };
+return { ok: true };

@@ -567,3 +567,123 @@ tr:hover .celula-inline-seta,
   stroke: none !important;
   stroke-width: 0 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   IDENTIDADE DESTE PROJETO (design.md): Linear + Stripe Dashboard, tom claro.
+   Tema ativo: :root (sem classe no <body>). Os --color-* entram depois dos apelidos
+   do template para valerem na tela.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --brand: #2E3C50;
+  --accent-hover: #223044;
+  --accent-soft: #EEF8EE;
+  --accent-soft-hover: #e2f3e2;
+  --accent-text: #2E3C50;
+  --ring: #66CB66;
+
+  --bg: #f8fafc;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-hover: #f1f5f9;
+  --surface-active: #e2e8f0;
+  --surface-muted: #f1f5f9;
+  --bg-sunken: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-subtle: #eef2f7;
+  --fg: #0f172a;
+  --fg-muted: #64748b;
+  --fg-subtle: #64748b;
+
+  --success: #2F8F3F;
+  --success-soft: #2f8f3f1a;
+  --warning: #d97706;
+  --warning-soft: #d977061a;
+  --danger: #dc2626;
+  --danger-soft: #dc26261a;
+
+  --raio-cartao: 16px;
+  --altura-controle: 40px;
+
+  --color-primary: #2E3C50;
+  --color-primary-hover: #223044;
+  --color-primary-light: #66CB66;
+  --color-primary-bg: #EEF8EE;
+  --color-nav: #ffffff;
+  --color-nav-text: #475569;
+  --color-nav-active: #2E3C50;
+  --color-nav-hover: #EEF8EE;
+  --color-receita: #2F8F3F;
+  --color-despesa: #dc2626;
+  --color-pendente: #d97706;
+  --color-pago: #2F8F3F;
+
+  --robo-casco: #ffffff;
+  --robo-traco: #cbd5e1;
+  --robo-visor: #1e293b;
+  --robo-olho: #38bdf8;
+  --robo-acento: #06b6d4;
+  --robo-halo: #cffafe;
+  --robo-bolha: #f1f5f9;
+  --robo-grade: rgba(30, 64, 175, 0.045);
+
+  --mola: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cartao { box-shadow: var(--shadow-md); }
+
+/* Navegação: barra do item ativo cresce em verde; hover em verde muito claro. */
+.nav-item { position: relative; color: var(--color-nav-text); }
+.nav-item:hover { background-color: var(--color-nav-hover); color: var(--color-nav-active); }
+.nav-item[data-active="true"] { background-color: var(--color-primary-bg); color: var(--color-nav-active); font-weight: 600; }
+.nav-item[data-active="true"]::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 3px;
+  background: var(--color-primary-light); transform-origin: center; animation: barraAtiva .24s var(--mola);
+}
+
+button:active:not(:disabled), a.botao:active { transform: scale(0.97); }
+
+.pagina-entra { animation: subirConteudo .32s var(--mola); }
+.cascata > * { animation: subirConteudo .32s var(--mola) both; }
+.cascata > *:nth-child(2) { animation-delay: 20ms; }
+.cascata > *:nth-child(3) { animation-delay: 40ms; }
+.cascata > *:nth-child(4) { animation-delay: 60ms; }
+.cascata > *:nth-child(5) { animation-delay: 80ms; }
+.cascata > *:nth-child(6) { animation-delay: 100ms; }
+
+.barra-confianca { height: 6px; border-radius: 999px; background: var(--surface-muted); overflow: hidden; }
+.barra-confianca > span { display: block; height: 100%; border-radius: 999px; animation: crescerBarra .7s var(--mola); transform-origin: left; }
+
+/* Conversa */
+.conversa-fundo {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--robo-grade) 1px, transparent 1px), linear-gradient(90deg, var(--robo-grade) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+.bolha-robo { background: var(--robo-bolha); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bolha-usuario { background: var(--color-primary); color: var(--accent-fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Robô: reage ao que está acontecendo */
+.robo { overflow: visible; }
+.robo .robo-olhos { transform-origin: center; animation: roboPiscar 4.5s infinite; }
+.robo-pensando .robo-olhos, .robo-executando .robo-olhos { animation: roboPulsar 1s var(--mola) infinite; }
+.robo-pensando .robo-antena, .robo-executando .robo-antena { animation: roboBrilho 1s ease-in-out infinite; }
+.robo-varredura { opacity: 0; }
+.robo-pensando .robo-varredura, .robo-executando .robo-varredura { opacity: .55; animation: roboVarrer 1.4s linear infinite; }
+.robo-halo { opacity: 0; }
+.robo-pensando .robo-halo, .robo-executando .robo-halo { opacity: 1; animation: roboBrilho 1.4s ease-in-out infinite; }
+.robo-erro .robo-halo { opacity: 1; fill: var(--danger-soft); }
+
+@keyframes subirConteudo { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes barraAtiva { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes crescerBarra { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes roboPiscar { 0%, 96%, 100% { transform: scaleY(1); } 98% { transform: scaleY(.1); } }
+@keyframes roboPulsar { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes roboBrilho { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes roboVarrer { from { transform: translateY(0); } to { transform: translateY(9px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pagina-entra, .cascata > *, .barra-confianca > span, .nav-item[data-active="true"]::before,
+  .robo .robo-olhos, .robo-antena, .robo-varredura, .robo-halo { animation: none !important; }
+  button:active:not(:disabled) { transform: none; }
+}

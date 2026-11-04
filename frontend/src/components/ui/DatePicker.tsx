@@ -110,7 +110,7 @@ export default function DatePicker({ label, value, onChange, placeholder = 'DD/M
           aria-invalid={error ? true : undefined}
           onClick={() => !disabled && setOpen(!open)}
           className={`
-            w-full min-w-[160px] h-9 pl-3 pr-9 text-[14px] rounded-lg border text-left
+            w-full min-w-[160px] h-[var(--altura-controle)] pl-3 pr-9 text-[14px] rounded-lg border text-left
             disabled:opacity-50 disabled:cursor-not-allowed
             transition-all duration-200 cursor-pointer
           `}

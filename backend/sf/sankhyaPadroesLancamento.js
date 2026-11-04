@@ -1,0 +1,17 @@
+const codemp = inteiro(event.codemp);
+if (codemp < 0 || event.codemp === undefined || event.codemp === '') return { ok: false, erro: 'Informe a empresa.' };
+// GROUPING SETS devolve, na mesma consulta, o ranking geral (TODOS) e o ranking dentro de cada TOP:
+// a natureza mais usada da empresa nao e necessariamente a mais usada dentro da folha.
+const sql = `SELECT DIM, TOP_REF, COD, N FROM (
+  SELECT CASE WHEN GROUPING(CODNAT) = 0 THEN 'NATUREZA' WHEN GROUPING(CODCENCUS) = 0 THEN 'CENTRO' WHEN GROUPING(CODCTABCOINT) = 0 THEN 'CONTA' WHEN GROUPING(CODTIPTIT) = 0 THEN 'TITULO' ELSE 'TOP' END AS DIM,
+    CASE WHEN GROUPING(CODNAT) = 1 AND GROUPING(CODCENCUS) = 1 AND GROUPING(CODCTABCOINT) = 1 AND GROUPING(CODTIPTIT) = 1 THEN 'TODOS'
+         WHEN GROUPING(CODTIPOPER) = 1 THEN 'TODOS' ELSE TO_CHAR(CODTIPOPER) END AS TOP_REF,
+    TO_CHAR(CASE WHEN GROUPING(CODNAT) = 0 THEN CODNAT WHEN GROUPING(CODCENCUS) = 0 THEN CODCENCUS WHEN GROUPING(CODCTABCOINT) = 0 THEN CODCTABCOINT WHEN GROUPING(CODTIPTIT) = 0 THEN CODTIPTIT ELSE CODTIPOPER END) AS COD,
+    COUNT(*) AS N
+  FROM TGFFIN
+  WHERE CODEMP = ${codemp} AND RECDESP = -1 AND DTNEG >= ADD_MONTHS(SYSDATE, -24)
+  GROUP BY GROUPING SETS ((CODTIPOPER), (CODNAT), (CODCENCUS), (CODCTABCOINT), (CODTIPTIT),
+    (CODTIPOPER, CODNAT), (CODTIPOPER, CODCENCUS), (CODTIPOPER, CODCTABCOINT), (CODTIPOPER, CODTIPTIT))
+) WHERE COD IS NOT NULL ORDER BY DIM, TOP_REF, N DESC`;
+const linhasRanking = await erpConsulta(sql);
+return { ok: true, itens: linhasRanking.map((l) => ({ dim: l.DIM, topRef: l.TOP_REF, cod: l.COD, n: Number(l.N) })) };

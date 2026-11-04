@@ -118,7 +118,7 @@ export default function MultiSelect({
           aria-expanded={open}
           aria-haspopup="listbox"
           onClick={() => !disabled && setOpen(!open)}
-          className="w-full h-9 pl-3 pr-9 text-[14px] rounded-lg border text-left overflow-hidden transition-all duration-200 cursor-pointer"
+          className="w-full h-[var(--altura-controle)] pl-3 pr-9 text-[14px] rounded-lg border text-left overflow-hidden transition-all duration-200 cursor-pointer"
           style={{
             backgroundColor: 'var(--color-surface)',
             borderColor: 'var(--color-border)',

@@ -18,7 +18,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const sizeClasses: Record<Size, string> = {
   sm: 'h-8 px-3 text-[13px] rounded-[10px]',
-  md: 'h-9 px-3.5 text-[13.5px] rounded-lg',
+  md: 'h-[var(--altura-controle)] px-3.5 text-[13.5px] rounded-lg',
   lg: 'h-10 px-4 text-[14px] rounded-lg',
 };
 

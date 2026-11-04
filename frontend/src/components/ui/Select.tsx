@@ -143,7 +143,7 @@ export default function Select({ label, error, options, placeholder = 'Selecione
             w-full text-[14px] rounded-lg border text-left overflow-hidden
             disabled:opacity-50 disabled:cursor-not-allowed
             transition-[border-color,box-shadow] duration-150 cursor-pointer
-            ${inline ? 'celula-inline celula-inline-marca pl-2 pr-7 py-1' : 'h-9 pl-3 pr-9'}
+            ${inline ? 'celula-inline celula-inline-marca pl-2 pr-7 py-1' : 'h-[var(--altura-controle)] pl-3 pr-9'}
           `}
           style={{
             backgroundColor: inline ? undefined : 'var(--bg-elevated)',

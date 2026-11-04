@@ -1,14 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <!-- Os assets sao relativos: em rota com mais de um nivel (/estudo/x, /lancamentos/1), recarregar
+         a pagina buscaria /estudo/assets/... Esta base aponta de volta para a raiz do app. -->
+    <script id="base-rota">
+      (function () {
+        var m = location.pathname.match(/^(.*?)\/(lancamentos|caixa-entrada|aprovacoes|configuracao|assistente|playground|estudo|ajuda|login)(\/|$)/);
+        if (m) { var b = document.createElement('base'); b.href = m[1] + '/'; document.head.appendChild(b); }
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Fonte do design system Mitra (Geist 400/500/600) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
-    <title>react-ts-tailwind</title>
+    <title>Mitra — Lançamentos Fiscais</title>
   </head>
   <body>
     <div id="root"></div>
