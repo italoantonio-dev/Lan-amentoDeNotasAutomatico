@@ -74,13 +74,15 @@ function compararLinha(itemDoc, pedido, it) {
   };
 }
 
-// entrada: { documento, empresa, parceiros, dePara, referencias, pedidos, existentes }
+// entrada: { documento, empresas, parceiros, dePara, referencias, pedidos, existentes }
+//   empresas: um mesmo CNPJ pode pertencer a mais de um codigo de empresa no Sankhya: vale o conjunto.
 //   documento.itens: [{ nItem, cProd, cEAN, xProd, quantidade, unidade, valorUnitario, valorTotal, codprod? }]
 //   pedidos: [{ NUNOTA, NUMNOTA, CODEMP, CODPARC, DTNEG, CODTIPOPER, itens: [...TGFITE], vinculos: [...TGFVAR] }]
 //   existentes: notas no ERP com a mesma chave ou o mesmo numero/serie/parceiro
 function conferir(entrada) {
   const doc = entrada.documento || {};
-  const empresa = entrada.empresa || null;
+  const empresas = entrada.empresas || [];
+  const codemps = empresas.map((e) => num(e.CODEMP));
   const parceiros = entrada.parceiros || [];
   const codparcs = parceiros.map((p) => num(p.CODPARC));
   const pedidos = entrada.pedidos || [];
@@ -88,7 +90,7 @@ function conferir(entrada) {
   const resultado = {
     versao: 1, somenteLeitura: true, situacao: '', resumo: '',
     documento: { chave: doc.chave || '', numero: doc.numero || '', serie: doc.serie || '', dataEmissao: doc.dataEmissao || '', cnpjEmitente: doc.cnpjEmitente || '', cnpjDestinatario: doc.cnpjDestinatario || '', valorTotal: num(doc.valorTotal), itens: (doc.itens || []).length },
-    empresa: empresa ? { CODEMP: num(empresa.CODEMP), NOME: empresa.NOME || '' } : null,
+    empresas: empresas.map((e) => ({ CODEMP: num(e.CODEMP), NOME: e.NOME || '' })),
     parceiros: parceiros.map((p) => ({ CODPARC: num(p.CODPARC), NOME: p.RAZAOSOCIAL || p.NOMEPARC || '', FORNECEDOR: p.FORNECEDOR || '' })),
     duplicidade: (entrada.existentes || []).map((n) => ({ NUNOTA: num(n.NUNOTA) || null, NUMNOTA: n.NUMNOTA ?? null, SERIENOTA: n.SERIENOTA ?? null, CODTIPOPER: num(n.CODTIPOPER) || null, STATUSNOTA: n.STATUSNOTA || '', motivo: String(n.MOTIVO || '') })),
     itens: [], pedidos: [], alertas,
@@ -98,7 +100,7 @@ function conferir(entrada) {
     const partes = resultado.duplicidade.map((d) => (textos[d.motivo] || d.motivo) + (d.NUNOTA ? ' (NUNOTA ' + d.NUNOTA + ')' : ' (ainda sem nota gerada)'));
     alertas.push({ tipo: 'JA_EXISTE_NO_ERP', mensagem: 'Esta NF-e já aparece no ERP: ' + unicos(partes).join('; ') + '.' });
   }
-  if (!empresa) {
+  if (!empresas.length) {
     resultado.situacao = 'SEM_EMPRESA';
     resultado.resumo = 'O CNPJ do destinatário não corresponde a nenhuma empresa cadastrada.';
     return resultado;
@@ -109,8 +111,8 @@ function conferir(entrada) {
     return resultado;
   }
 
-  const daEmpresa = pedidos.filter((p) => num(p.CODEMP) === num(empresa.CODEMP) && codparcs.includes(num(p.CODPARC)));
-  const outrasEmpresas = pedidos.filter((p) => num(p.CODEMP) !== num(empresa.CODEMP) && codparcs.includes(num(p.CODPARC)));
+  const daEmpresa = pedidos.filter((p) => codemps.includes(num(p.CODEMP)) && codparcs.includes(num(p.CODPARC)));
+  const outrasEmpresas = pedidos.filter((p) => !codemps.includes(num(p.CODEMP)) && codparcs.includes(num(p.CODPARC)));
 
   for (const itemDoc of doc.itens || []) {
     const ident = identificarProduto(itemDoc, codparcs, entrada.dePara || [], entrada.referencias || []);
@@ -144,6 +146,7 @@ function conferir(entrada) {
 
   // Pedidos candidatos, com as contagens que sustentam a ordem de apresentacao. A ordem e so
   // apresentacao: com mais de um candidato a situacao continua AMBIGUO ate uma pessoa decidir.
+  // No empate vem o pedido mais recente, por evidencia historica (relatorio de precisao), nao por regra.
   const identificados = resultado.itens.filter((i) => i.identificacao.situacao !== 'NAO_IDENTIFICADO').length;
   const candidatos = unicos(resultado.itens.flatMap((i) => i.pedidos));
   resultado.pedidos = candidatos.map((nu) => {
@@ -155,7 +158,7 @@ function conferir(entrada) {
     const foraDoDocumento = (p.itens || []).filter((it) => saldo(it).pendente > ARRED && !codprodsDoc.includes(num(it.CODPROD)));
     const vinculos = p.vinculos || [];
     return {
-      NUNOTA: nu, NUMNOTA: p.NUMNOTA ?? null, DTNEG: p.DTNEG || '', CODPARC: num(p.CODPARC), CODTIPOPER: num(p.CODTIPOPER),
+      NUNOTA: nu, NUMNOTA: p.NUMNOTA ?? null, DTNEG: p.DTNEG || '', CODEMP: num(p.CODEMP), CODPARC: num(p.CODPARC), CODTIPOPER: num(p.CODTIPOPER), STATUSNOTA: p.STATUSNOTA || '',
       itensCobertos, cobreTodosOsItens: identificados > 0 && itensCobertos === identificados,
       itensComSaldoSuficiente: conta((l) => l.saldoAposDocumento !== null && l.saldoAposDocumento >= -ARRED),
       itensComPrecoIgual: conta((l) => !l.divergencias.includes('PRECO_DIFERENTE')),
@@ -165,7 +168,7 @@ function conferir(entrada) {
       itensPendentesForaDoDocumento: foraDoDocumento.length,
     };
   }).sort((a, b) => (b.cobreTodosOsItens - a.cobreTodosOsItens) || (b.itensCobertos - a.itensCobertos) || (b.itensComSaldoSuficiente - a.itensComSaldoSuficiente)
-    || (b.itensComPrecoIgual - a.itensComPrecoIgual) || (b.itensComQuantidadeIgualAoPendente - a.itensComQuantidadeIgualAoPendente) || (a.NUNOTA - b.NUNOTA));
+    || (b.itensComPrecoIgual - a.itensComPrecoIgual) || (b.itensComQuantidadeIgualAoPendente - a.itensComQuantidadeIgualAoPendente) || (b.NUNOTA - a.NUNOTA));
 
   const sit = resultado.itens.map((i) => i.situacao);
   const nTotal = sit.length;

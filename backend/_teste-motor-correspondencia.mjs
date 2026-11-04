@@ -20,7 +20,7 @@ const REFS = [{ CODPROD: 650, REFFORN: 'RF-650', REFERENCIA: '7890000000017' }, 
 const item = (o) => ({ nItem: 1, cProd: 'ABC-1', quantidade: 10, unidade: 'UN', valorUnitario: 5, ...o });
 const linha = (o) => ({ SEQUENCIA: 1, CODPROD: 500, QTDNEG: 10, QTDENTREGUE: 0, VLRUNIT: 5, CODVOL: 'UN', PENDENTE: 'S', ...o });
 const pedido = (nu, itens, o = {}) => ({ NUNOTA: nu, NUMNOTA: nu - 1000, CODEMP: 200, CODPARC: 10, DTNEG: '2026-01-10', CODTIPOPER: 1314, itens, vinculos: [], ...o });
-const rodar = (itens, pedidos, extra = {}) => conferir({ documento: { chave: '3'.repeat(44), numero: '123', cnpjEmitente: '11222333000181', cnpjDestinatario: '11444777000161', valorTotal: 50, itens }, empresa: EMPRESA, parceiros: PARCEIROS, dePara: DEPARA, referencias: REFS, pedidos, existentes: [], ...extra });
+const rodar = (itens, pedidos, extra = {}) => conferir({ documento: { chave: '3'.repeat(44), numero: '123', cnpjEmitente: '11222333000181', cnpjDestinatario: '11444777000161', valorTotal: 50, itens }, empresas: [EMPRESA], parceiros: PARCEIROS, dePara: DEPARA, referencias: REFS, pedidos, existentes: [], ...extra });
 
 // 1. Pedido unico, tudo igual
 let r = rodar([item()], [pedido(1001, [linha()])]);
@@ -55,6 +55,8 @@ conf('5 unidade diferente sinalizada, sem conversao inventada', l5.divergencias.
 r = rodar([item({ quantidade: 4 })], [pedido(1010, [linha({ QTDNEG: 4 })]), pedido(1011, [linha({ QTDNEG: 20 })])]);
 conf('6 dois pedidos servem: AMBIGUO com os dois candidatos', r.situacao === 'AMBIGUO' && r.itens[0].pedidos.length === 2 && r.pedidos.length === 2, r.situacao);
 conf('6 ordem de apresentacao explicada por contagens', r.pedidos[0].itensComQuantidadeIgualAoPendente === 1 && r.pedidos[0].NUNOTA === 1010);
+r = rodar([item({ quantidade: 4 })], [pedido(1012, [linha({ QTDNEG: 20 })]), pedido(1013, [linha({ QTDNEG: 20 })])]);
+conf('6 no empate o pedido mais recente vem primeiro, e continua AMBIGUO', r.situacao === 'AMBIGUO' && r.pedidos[0].NUNOTA === 1013);
 
 // 7. Itens em pedidos diferentes, cada um com um so pedido
 r = rodar([item(), item({ nItem: 2, cProd: 'XYZ-9', quantidade: 1 })], [pedido(1020, [linha()]), pedido(1021, [linha({ CODPROD: 600, QTDNEG: 1 })])]);
@@ -101,9 +103,9 @@ conf('15 zero a esquerda nao e removido (regra nao inventada)', id({ cProd: '0AB
 conf('15 produto informado por uma pessoa vale', id({ codprod: 42 }).fonte === 'INFORMADO');
 
 // 16. Sem empresa / sem fornecedor
-r = conferir({ documento: { itens: [item()] }, empresa: null, parceiros: PARCEIROS, pedidos: [] });
+r = conferir({ documento: { itens: [item()] }, empresas: [], parceiros: PARCEIROS, pedidos: [] });
 conf('16 sem empresa para antes de comparar', r.situacao === 'SEM_EMPRESA');
-r = conferir({ documento: { itens: [item()] }, empresa: EMPRESA, parceiros: [], pedidos: [] });
+r = conferir({ documento: { itens: [item()] }, empresas: [EMPRESA], parceiros: [], pedidos: [] });
 conf('16 sem fornecedor para antes de comparar', r.situacao === 'SEM_FORNECEDOR');
 
 // 17. Duas linhas do mesmo produto no mesmo pedido
@@ -114,10 +116,20 @@ conf('17 duas linhas no mesmo pedido: PEDIDO_UNICO com as duas linhas e saldo so
 r = rodar([item()], [pedido(1110, [linha(), linha({ SEQUENCIA: 2, CODPROD: 999 })])]);
 conf('18 itens do pedido fora da nota ficam contados', r.pedidos[0].itensPendentesForaDoDocumento === 1);
 
-// 19. Deterministico e sem efeito na entrada
-const entrada = { documento: { itens: [item()] }, empresa: EMPRESA, parceiros: PARCEIROS, dePara: DEPARA, referencias: REFS, pedidos: [pedido(1120, [linha()])], existentes: [] };
+// 19. Mesmo CNPJ em dois codigos de empresa (encontrado no historico: 299+200, 300+399, 500+599)
+r = rodar([item()], [pedido(1130, [linha()], { CODEMP: 299 })], { empresas: [EMPRESA, { CODEMP: 299, NOME: 'Empresa 299' }] });
+conf('19 CNPJ com dois codigos de empresa: pedido em qualquer um e candidato', r.situacao === 'PEDIDO_UNICO' && r.pedidos[0].CODEMP === 299 && r.empresas.length === 2, r.situacao);
+
+// 20. Codigo ligado a varios produtos: o pedido desfaz a duvida, ou o alerta fica
+r = rodar([item({ cProd: 'DUP' })], [pedido(1140, [linha({ CODPROD: 802 })])]);
+conf('20 codigo com dois produtos e so um no pedido: sem alerta de produto', r.situacao === 'PEDIDO_UNICO' && !r.alertas.some((a) => a.tipo === 'PRODUTO_AMBIGUO'));
+r = rodar([item({ cProd: 'DUP' })], [pedido(1141, [linha({ CODPROD: 801 }), linha({ SEQUENCIA: 2, CODPROD: 802 })])]);
+conf('20 os dois produtos no pedido: alerta de produto', r.alertas.some((a) => a.tipo === 'PRODUTO_AMBIGUO'));
+
+// 21. Deterministico e sem efeito na entrada
+const entrada = { documento: { itens: [item()] }, empresas: [EMPRESA], parceiros: PARCEIROS, dePara: DEPARA, referencias: REFS, pedidos: [pedido(1120, [linha()])], existentes: [] };
 const copia = JSON.stringify(entrada);
 const a1 = JSON.stringify(conferir(entrada));
-conf('19 mesma entrada, mesma saida; entrada intacta', a1 === JSON.stringify(conferir(entrada)) && copia === JSON.stringify(entrada));
+conf('21 mesma entrada, mesma saida; entrada intacta', a1 === JSON.stringify(conferir(entrada)) && copia === JSON.stringify(entrada));
 
 encerrar('Motor de correspondencia');

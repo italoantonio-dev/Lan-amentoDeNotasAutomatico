@@ -6,7 +6,7 @@ if (!pode || Number(pode.PODE) !== 1) return { ok: false, erro: 'Você não tem 
 const lancamentoId = inteiro(event.lancamentoId);
 let lido = null;
 let origem = '';
-let empresaDoLancamento = null;
+let empresaDoLancamento = null; // sem XML, a empresa vem do lancamento
 if (lancamentoId) {
   const d = await uma(SF.erpDadosEnvio, { id: lancamentoId });
   if (!d) return { ok: false, erro: 'Lançamento não encontrado, ou fora dos tipos que você enxerga.' };
@@ -38,22 +38,23 @@ if (lancamentoId) {
 }
 
 const destinatarios = (lido.cnpjsCandidatos || []).filter((c) => c && c !== lido.cnpjEmitente);
-const empresas = await listar(SF.roboEmpresas, {});
-const pelaNota = empresas.find((e) => destinatarios.includes(soDigitos(e.CNPJ))) || null;
-const empresa = pelaNota ? { CODEMP: pelaNota.CODEMP, NOME: pelaNota.NOME } : (destinatarios.length ? null : empresaDoLancamento);
+// Um CNPJ pode pertencer a mais de um codigo de empresa: vale o conjunto.
+const cadastradas = await listar(SF.roboEmpresas, {});
+const pelaNota = cadastradas.filter((e) => destinatarios.includes(soDigitos(e.CNPJ))).map((e) => ({ CODEMP: e.CODEMP, NOME: e.NOME }));
+const empresas = pelaNota.length ? pelaNota : (!destinatarios.length && empresaDoLancamento ? [empresaDoLancamento] : []);
 const documento = {
   chave: lido.chave || '', numero: lido.numero || '', serie: lido.serie || '', dataEmissao: lido.dataEmissao || '', cnpjEmitente: soDigitos(lido.cnpjEmitente), cnpjDestinatario: destinatarios[0] || '', valorTotal: Number(lido.valorTotal) || 0,
   itens: (lido.itens || []).slice(0, 990).map((i) => ({ nItem: i.nItem, cProd: i.cProd || '', cEAN: i.cEAN || '', xProd: i.descricao || '', quantidade: i.quantidade, unidade: i.unidade || '', valorUnitario: i.valorUnitario, valorTotal: i.valorTotal, codprod: inteiro(i.codprod) })),
 };
 let dados = { parceiros: [], dePara: [], referencias: [], pedidos: [], existentes: [], alertasLeitura: [] };
 try {
-  if (empresa) dados = await dadosDaCorrespondencia(documento);
+  if (empresas.length) dados = await dadosDaCorrespondencia(documento);
 } catch (e) {
   return { ok: false, erro: 'Não consegui consultar o ERP: ' + msgErro(e) };
 }
-const resultado = correspondencia.conferir({ documento, empresa, parceiros: dados.parceiros, dePara: dados.dePara, referencias: dados.referencias, pedidos: dados.pedidos, existentes: dados.existentes });
+const resultado = correspondencia.conferir({ documento, empresas, parceiros: dados.parceiros, dePara: dados.dePara, referencias: dados.referencias, pedidos: dados.pedidos, existentes: dados.existentes });
 resultado.alertas.push(...dados.alertasLeitura);
-if (empresaDoLancamento && pelaNota && Number(pelaNota.CODEMP) !== Number(empresaDoLancamento.CODEMP)) {
-  resultado.alertas.push({ tipo: 'EMPRESA_DIFERENTE_DO_LANCAMENTO', mensagem: 'O destinatário da NF-e é a empresa ' + pelaNota.CODEMP + ', mas o lançamento está na empresa ' + empresaDoLancamento.CODEMP + '.' });
+if (empresaDoLancamento && pelaNota.length && !pelaNota.some((e) => Number(e.CODEMP) === Number(empresaDoLancamento.CODEMP))) {
+  resultado.alertas.push({ tipo: 'EMPRESA_DIFERENTE_DO_LANCAMENTO', mensagem: 'O destinatário da NF-e é a empresa ' + pelaNota.map((e) => e.CODEMP).join(' ou ') + ', mas o lançamento está na empresa ' + empresaDoLancamento.CODEMP + '.' });
 }
 return { ok: true, origem, piloto: PILOTO_CORRESPONDENCIA, resultado };

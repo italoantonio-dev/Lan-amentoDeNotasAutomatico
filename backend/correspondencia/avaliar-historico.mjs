@@ -9,7 +9,7 @@ import { carregarHistorico, PILOTO } from './historico.mjs';
 import { registro } from '../auditoria/leitura.mjs';
 
 const require = createRequire(import.meta.url);
-const { conferir } = require('./motor.cjs');
+const { conferir, identificarProduto } = require('./motor.cjs');
 const num = (v) => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 const soDig = (v) => String(v ?? '').replace(/\D/g, '');
 const pct = (a, b) => (b ? `${((100 * a) / b).toFixed(1)}%` : '—');
@@ -20,7 +20,7 @@ const h = await carregarHistorico();
 
 // Indices
 const cnpjParaParceiros = agrupar(h.parceiros.filter((p) => p.ATIVO === 'S'), (p) => soDig(p.CGC_CPF));
-const cnpjParaEmpresa = new Map(h.empresas.map((e) => [soDig(e.CGC), { CODEMP: num(e.CODEMP), NOME: `Empresa ${e.CODEMP}` }]));
+const cnpjParaEmpresas = agrupar(h.empresas.map((e) => ({ CODEMP: num(e.CODEMP), NOME: `Empresa ${e.CODEMP}`, cnpj: soDig(e.CGC) })), (e) => e.cnpj);
 const xmlPorNota = new Map();
 for (const x of h.xmlCab) { const a = xmlPorNota.get(num(x.NUNOTA)); if (!a || num(x.NUARQUIVO) > num(a.NUARQUIVO)) xmlPorNota.set(num(x.NUNOTA), x); }
 const itensXmlPorArquivo = agrupar(h.xmlItens, (x) => num(x.NUARQUIVO));
@@ -63,7 +63,8 @@ function avaliar(cortadosComoFechados) {
     const parceiros = (cnpjParaParceiros.get(documento.cnpjEmitente) ?? []).map((p) => ({ CODPARC: num(p.CODPARC) }));
     const codparcs = parceiros.map((p) => p.CODPARC);
     const candidatos = codparcs.flatMap((c) => pedidosPorParceiro.get(c) ?? []).filter((p) => p.NUNOTA < nu).map((p) => pedidoAntesDa(p, nu, cortadosComoFechados));
-    const r = conferir({ documento, empresa: cnpjParaEmpresa.get(documento.cnpjDestinatario) ?? null, parceiros, dePara: h.dePara, referencias: h.referencias, pedidos: candidatos, existentes: [] });
+    const empresasDoc = cnpjParaEmpresas.get(documento.cnpjDestinatario) ?? [];
+    const r = conferir({ documento, empresas: empresasDoc, parceiros, dePara: h.dePara, referencias: h.referencias, pedidos: candidatos, existentes: [] });
     const gab = gabaritoPorNota.get(nu) ?? [];
     const T = [...new Set(gab.map((v) => num(v.NUNOTAORIG)))].sort((a, b) => a - b);
     const C = r.pedidos.map((p) => p.NUNOTA);
@@ -79,12 +80,11 @@ function avaliar(cortadosComoFechados) {
     let motivoFora = '';
     if (T.length && !T.every((t) => C.includes(t))) {
       const tp = T.map((t) => pedidoPorNunota.get(t)).filter(Boolean);
-      const empresaDoc = cnpjParaEmpresa.get(documento.cnpjDestinatario);
       const codprodsDoc = new Set(r.itens.flatMap((i) => i.identificacao.codprods));
       if (tp.length < T.length) motivoFora = 'pedido fora do periodo lido';
       else if (tp.every((p) => p.NUNOTA > nu)) motivoFora = 'pedido criado depois da nota';
-      else if (!empresaDoc) motivoFora = 'destinatario sem empresa';
-      else if (tp.every((p) => p.CODEMP !== empresaDoc.CODEMP)) motivoFora = 'pedido de outra empresa';
+      else if (!empresasDoc.length) motivoFora = 'destinatario sem empresa';
+      else if (tp.every((p) => !empresasDoc.some((e) => e.CODEMP === p.CODEMP))) motivoFora = 'pedido de outra empresa';
       else if (tp.every((p) => !codparcs.includes(p.CODPARC))) motivoFora = 'pedido de outro parceiro (CNPJ diferente ou parceiro inativo)';
       else if (tp.every((p) => !p.itensAtuais.some((it) => codprodsDoc.has(num(it.CODPROD))))) motivoFora = 'produto do XML nao identificado como o do pedido';
       else motivoFora = 'pedido sem saldo para o produto antes da nota';
@@ -114,6 +114,11 @@ function metricas(casos) {
     decididosErrados: decididos.filter((c) => !decididosCertos.includes(c)).map((c) => ({ nu: c.nu, situacao: c.r.situacao, T: c.T, C: c.C })),
     ambiguos: amb.length, ambiguosComGabaritoNosCandidatos: conta(amb, (c) => c.T.every((t) => c.C.includes(t))), ambiguosPrimeiroCerto: conta(amb, (c) => c.T.includes(c.C[0])),
     candidatosPorAmbiguo: amb.map((c) => c.C.length).sort((a, b) => a - b),
+    // Evidencia para Compras (A-07). O motor NAO aplica nada disto: com mais de um candidato, continua ambiguo.
+    ambUnicoCobreTudo: conta(amb, (c) => c.r.pedidos.filter((p) => p.cobreTodosOsItens).length === 1),
+    ambUnicoCobreTudoCerto: conta(amb, (c) => { const u = c.r.pedidos.filter((p) => p.cobreTodosOsItens); return u.length === 1 && c.T.includes(u[0].NUNOTA) && c.T.length === 1; }),
+    ambMaisAntigoCerto: conta(amb, (c) => c.T.includes(Math.min(...c.C))),
+    ambMaisRecenteCerto: conta(amb, (c) => c.T.includes(Math.max(...c.C))),
     motivosFora: Object.fromEntries([...agrupar(comGab.filter((c) => c.motivoFora), (c) => c.motivoFora)].map(([k, v]) => [k, v.length])),
     decididosErradosMotivo: Object.fromEntries([...agrupar(decididos.filter((c) => !decididosCertos.includes(c)), (c) => (c.T.every((t) => t > c.nu) ? 'pedido verdadeiro criado depois da nota' : 'outro'))].map(([k, v]) => [k, v.length])),
   };
@@ -133,6 +138,31 @@ for (const x of itensAlinhados) {
   if (id.situacao === 'IDENTIFICADO') { if (id.codprods[0] === verdade) k.certo++; else k.errado++; }
   else if (id.situacao === 'AMBIGUO') { if (id.codprods.includes(verdade)) k.ambiguoComCerto++; else k.ambiguoSemCerto++; }
   porFonte.set(f, k);
+}
+// Limite da medida de identificacao: a TGFPAP de hoje nao tem data e pode conter pares criados por
+// estas notas. Item cujo par (fornecedor, codigo) aparece pela 1a vez no periodo e o teto do que
+// poderia nao estar cadastrado quando a nota chegou.
+const paresVistos = new Set();
+let primeiraVez = 0;
+for (const c of [...principal].filter((x) => !x.semXml).sort((a, b) => a.nu - b.nu)) {
+  for (const x of c.itens) {
+    const par = `${c.r.documento.cnpjEmitente}|${String(x.it.cProd).trim().toUpperCase()}`;
+    if (!paresVistos.has(par)) { paresVistos.add(par); primeiraVez++; }
+  }
+}
+// Identificacao SEM o de-para: mede a forca das referencias do produto (fonte alternativa).
+const semDePara = { total: 0, certo: 0, errado: 0, ambiguoComCerto: 0, ambiguoSemCerto: 0, nenhum: 0, porFonte: {} };
+for (const c of principal.filter((x) => !x.semXml)) {
+  const codparcs = (cnpjParaParceiros.get(c.r.documento.cnpjEmitente) ?? []).map((p) => num(p.CODPARC));
+  for (const x of c.itens.filter((y) => y.e)) {
+    const id = identificarProduto({ cProd: x.it.cProd, cEAN: x.it.cEAN }, codparcs, [], h.referencias);
+    const verdade = num(x.e.CODPROD);
+    semDePara.total++;
+    const f = (semDePara.porFonte[id.fonte || 'NENHUMA'] ??= { total: 0, certo: 0, errado: 0, ambiguoComCerto: 0, ambiguoSemCerto: 0 });
+    f.total++;
+    if (id.situacao === 'NAO_IDENTIFICADO') semDePara.nenhum++;
+    else if (id.situacao === 'IDENTIFICADO') { if (id.codprods[0] === verdade) { semDePara.certo++; f.certo++; } else { semDePara.errado++; f.errado++; } } else if (id.codprods.includes(verdade)) { semDePara.ambiguoComCerto++; f.ambiguoComCerto++; } else { semDePara.ambiguoSemCerto++; f.ambiguoSemCerto++; }
+  }
 }
 const totalItensXml = principal.reduce((s, c) => s + (c.nItensXml ?? 0), 0);
 const notasMesmoNItens = conta(principal.filter((c) => !c.semXml), (c) => c.nItensXml === c.nItensErp);
@@ -155,6 +185,9 @@ const faixa = (l) => {
 const faixasPreco = Object.fromEntries([...agrupar(linhasCertas.filter((l) => !l.divergencias.includes('UNIDADE_DIFERENTE')), faixa)].map(([k, v]) => [k, v.length]));
 const unidadeDiferente = conta(linhasCertas, (l) => l.divergencias.includes('UNIDADE_DIFERENTE'));
 const paresUnidade = [...agrupar(linhasCertas.filter((l) => l.divergencias.includes('UNIDADE_DIFERENTE')), (l) => `${l.unidadeDocumento} -> ${l.unidadePedido}`)].map(([k, v]) => [k, v.length]).sort((a, b) => b[1] - a[1]).slice(0, 12);
+const unidDif = linhasCertas.filter((l) => l.divergencias.includes('UNIDADE_DIFERENTE'));
+const unidDifQtdIgual = conta(unidDif, (l) => Math.abs(l.quantidadeDocumento - l.pendente) <= 1e-6);
+const unidDifPrecoIgual = conta(unidDif, (l) => !l.divergencias.includes('PRECO_DIFERENTE'));
 const qtdIgualMesmaUnidade = conta(linhasCertas.filter((l) => !l.divergencias.includes('UNIDADE_DIFERENTE')), (l) => Math.abs(l.quantidadeDocumento - l.pendente) <= 1e-6);
 const itensParciais = conta(linhasCertas, (l) => l.saldoAposDocumento !== null && l.saldoAposDocumento > 1e-6);
 const qtdAcima = conta(linhasCertas, (l) => l.divergencias.includes('QUANTIDADE_ACIMA_DO_PENDENTE'));
@@ -171,7 +204,16 @@ const v05PendSemSaldo = conta(v05, (x) => x.pendenteS && x.saldo <= 1e-6);
 const v05NaoPendComSaldo = conta(v05, (x) => !x.pendenteS && x.saldo > 1e-6);
 
 const porTop = Object.fromEntries(PILOTO.topNota.map((t) => [t, metricas(principal.filter((c) => c.top === t))]));
-const saida = { geradoEm: new Date().toISOString(), consultas: registro.length, M, MO, porTop, porFonte: Object.fromEntries(porFonte), totalItensXml, itensAlinhados: itensAlinhados.length, notasMesmoNItens, itensUnicos: itensUnicos.length, itensUnicosCertos, linhasCertas: linhasCertas.length, faixasPreco, unidadeDiferente, paresUnidade, qtdIgualMesmaUnidade, itensParciais, qtdAcima, parcialAntes, v05: { itens: v05.length, igual: v05Igual, pendSemSaldo: v05PendSemSaldo, naoPendComSaldo: v05NaoPendComSaldo }, pedidos: pedidos.length };
+const saida = { geradoEm: new Date().toISOString(), consultas: registro.length, M, MO, porTop, porFonte: Object.fromEntries(porFonte), totalItensXml, itensAlinhados: itensAlinhados.length, notasMesmoNItens, itensUnicos: itensUnicos.length, itensUnicosCertos, linhasCertas: linhasCertas.length, faixasPreco, primeiraVez, semDePara, unidDifQtdIgual, unidDifPrecoIgual, unidadeDiferente, paresUnidade, qtdIgualMesmaUnidade, itensParciais, qtdAcima, parcialAntes, v05: { itens: v05.length, igual: v05Igual, pendSemSaldo: v05PendSemSaldo, naoPendComSaldo: v05NaoPendComSaldo }, pedidos: pedidos.length };
 fs.writeFileSync(new URL('../auditoria/.cache/avaliacao-correspondencia.json', import.meta.url), JSON.stringify(saida, null, 2));
 console.log(JSON.stringify({ ...saida, M: { ...M, decididosErrados: M.decididosErrados.slice(0, 5), candidatosPorAmbiguo: undefined }, MO: { ...MO, decididosErrados: MO.decididosErrados.length, candidatosPorAmbiguo: undefined }, porTop: Object.fromEntries(Object.entries(porTop).map(([k, v]) => [k, { comGabarito: v.comGabarito, situacoes: v.situacoes, decididos: v.decididos, decididosCertos: v.decididosCertos, cobertura: v.coberturaCandidatos }])) }, null, 1));
+const linhasReg = registro.map((x) => `| ${x.id} | ${x.objetivo} | ${x.origem} | ${x.periodo} | ${x.filtros} | ${x.linhas} | ${x.lidoEm ?? ''} |`);
+fs.writeFileSync(new URL('../../modulo-documental/registro-consultas-correspondencia.md', import.meta.url), `# Registro de consultas: avaliação do motor de correspondência
+
+Somente leitura no Oracle do Sankhya (trava de SELECT/WITH). ${registro.length} consultas, ${registro.filter((x) => x.erro).length} com erro.
+
+| Consulta | Objetivo | Origem | Período | Filtros | Linhas | Lida em |
+|---|---|---|---|---|---:|---|
+${linhasReg.join('\n')}
+`);
 console.log('pct exemplo', pct(M.decididosCertos, M.decididos));
