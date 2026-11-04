@@ -436,7 +436,8 @@ md.push(`\n## 4. Recomendações sobre TOP por tipo de documento\n`);
 md.push(`Cada recomendação traz evidência, ocorrências, grau de confiança, risco e responsável. Nenhuma foi aplicada.\n`);
 const recTop = (tipoDoc, categorias, filtroTop) => {
   const linhas = catTop.filter((r) => categorias.includes(r.CATEGORIA)).reduce((acc, r) => { acc[r.CODTIPOPER] = (acc[r.CODTIPOPER] ?? 0) + Number(r.DOCS); return acc; }, {});
-  const lista = Object.entries(linhas).filter(([t]) => !filtroTop || filtroTop(Number(t))).sort((a, b) => b[1] - a[1]);
+  // Nao filtra: lista todas as TOPs observadas e marca as de movimento inesperado.
+  const lista = Object.entries(linhas).sort((a, b) => b[1] - a[1]).map(([t, n]) => [t, n, !filtroTop || filtroTop(Number(t))]);
   const tot = lista.reduce((s, [, n]) => s + n, 0);
   return { lista, tot };
 };
@@ -449,14 +450,23 @@ const tiposDoc = [
   ['Encargos de folha (INSS, FGTS, IRRF)', ['GUIA_ENCARGO_FOLHA'], 'RH + Fiscal', 'Encargo é guia, não folha: decide se vira tipo próprio ou entra em Guia de Imposto.', (t) => nomes.TOP[t]?.tipmov === 'I'],
 ];
 md.push(`| Tipo | TOPs observadas (documentos) | Cobertura da 1ª | Confiança | Risco | Responsável |\n|---|---|---:|---|---|---|`);
+md.push(`<!-- ⚠ = a TOP é usada nesta operação, mas o movimento dela não é o esperado pelo sistema (C para nota, I para financeiro). -->`);
 for (const [rot, cats, resp, risco, filtro] of tiposDoc) {
   const { lista, tot } = recTop(rot, cats, filtro);
   const prim = lista[0];
   const cob = prim ? pct(prim[1], tot) : 0;
-  const conf = !prim ? 'SEM DADO' : cob >= 80 ? 'ALTA' : cob >= 50 ? 'MEDIA' : 'BAIXA';
-  md.push(`| ${rot} | ${lista.slice(0, 4).map(([t, n]) => `${nm('TOP', t)} (${n})`).join('; ') || '—'} | ${prim ? `${cob}% de ${tot}` : '—'} | ${conf} | ${risco} | ${resp} |`);
-  pend(`TOP padrão — ${rot}`, `Confirmar a TOP padrão de ${rot.toLowerCase()} por empresa`, prim ? `Partir de ${nm('TOP', prim[0])} (${cob}% dos documentos da categoria); onde a cobertura for baixa, manter correção manual por documento.` : 'Sem histórico: definir com a área.', `${catTop.id}; ${topCfg.id}`, tot, conf, risco, resp);
+  const conf = !prim ? 'SEM DADO' : !prim[2] ? 'BAIXA' : cob >= 80 ? 'ALTA' : cob >= 50 ? 'MEDIA' : 'BAIXA';
+  md.push(`| ${rot} | ${lista.slice(0, 4).map(([t, n, ok]) => `${nm('TOP', t)} (${n})${ok ? '' : ` ⚠ movimento ${nomes.TOP[t]?.tipmov ?? '?'}`}`).join('; ') || '—'} | ${prim ? `${cob}% de ${tot}` : '—'} | ${conf} | ${risco} | ${resp} |`);
+  pend(`TOP padrão — ${rot}`, `Confirmar a TOP padrão de ${rot.toLowerCase()} por empresa`, !prim ? 'Sem histórico: definir com a área.' : !prim[2] ? `A TOP mais usada (${nm('TOP', prim[0])}, ${cob}%) não é do movimento esperado: definir a TOP com a área antes de automatizar.` : `Partir de ${nm('TOP', prim[0])} (${cob}% dos documentos da categoria); onde a cobertura for baixa, manter correção manual por documento.`, `${catTop.id}; ${topCfg.id}`, tot, conf, risco, resp);
 }
+
+// Titulos que o proprio ERP cria a partir de outra nota (TOP de venda, transferencia ou devolucao):
+// ja existem no ERP e nao devem ser lancados de novo por documento.
+const geradosPeloErp = catTop.filter((r) => ['GUIA_IMPOSTO', 'BOLETO'].includes(r.CATEGORIA) && ['V', 'D', 'E', 'T'].includes(nomes.TOP[r.CODTIPOPER]?.tipmov));
+const gerGuia = geradosPeloErp.filter((r) => r.CATEGORIA === 'GUIA_IMPOSTO').reduce((s, r) => s + Number(r.DOCS), 0);
+const gerBoleto = geradosPeloErp.filter((r) => r.CATEGORIA === 'BOLETO').reduce((s, r) => s + Number(r.DOCS), 0);
+md.push(`\n**Gerados pelo próprio ERP** [${catTop.id}]: ${gerGuia} das ${totalDocsCat.GUIA_IMPOSTO ?? 0} guias tributárias e ${gerBoleto} dos ${totalDocsCat.BOLETO ?? 0} boletos estão em TOPs de venda, transferência ou devolução (${geradosPeloErp.slice().sort((a, b) => Number(b.DOCS) - Number(a.DOCS)).slice(0, 5).map((r) => `${nm('TOP', r.CODTIPOPER)}: ${r.DOCS}`).join('; ')}). São impostos e valores que o ERP cria a partir da nota de saída: já existem no ERP e ficam fora da automação por documento.`);
+pend('Títulos gerados pelo ERP', 'Confirmar que guias e boletos em TOP de venda, transferência ou devolução são criados pelo próprio ERP', 'Excluir esses títulos da automação: o robô só trata documento que chega de fora.', catTop.id, gerGuia + gerBoleto, 'MEDIA', 'Lançar de novo por documento duplicaria o imposto ou o valor.', 'Fiscal');
 
 md.push(`\n## 5. Fornecedores com histórico [${totais[0]?.id ?? ''} e seguintes]\n`);
 md.push(`- ${resumoForn.fornecedores} pares empresa × fornecedor com título no período; ${resumoForn.comHistorico} com 3 ou mais documentos.`);
@@ -491,7 +501,7 @@ rg.push(`| # | Categoria | Regra | Documentos | Confiança |\n|---|---|---|---:|
 const regrasCat = [
   ['FOLHA_INTEGRADA', 'título com ORIGEM = P (no período, todos na TOP 1607 e com naturezas de folha): folha que já entra por integração'],
   ['GUIA_ENCARGO_FOLHA', 'natureza no grupo "Despesa com folha" e descrição com INSS, GPS, FGTS, IRRF ou sindical'],
-  ['FOLHA_PAGAMENTO', 'natureza no grupo "Despesa com folha" e descrição de remuneração (salários, férias, rescisão, 13º, bônus, horas extras, comissão, premiação, indenização)'],
+  ['FOLHA_PAGAMENTO', 'natureza no grupo "Despesa com folha" e descrição de remuneração (salários, férias, rescisão, 13º salário, bônus, horas extras, premiação, indenização); comissão fica fora porque chega como nota de serviço'],
   ['GUIA_IMPOSTO', 'natureza no grupo de tributação ou descrição de tributo (ICMS, ISSQN, IRPJ, CSLL, PIS, COFINS, DIFAL, IR retido, taxa de importação, multa fiscal), ou tipo de título DARF/DAE/GNRE/GPS/DAS'],
   ['CTE_FRETE', 'chave de CT-e no título ou no cabeçalho da nota (avaliada logo depois da folha integrada); ou TOP de CT-e com natureza de frete'],
   ['NOTA_FISCAL', 'título vindo de nota (ORIGEM = E), TOP de compra (TIPMOV = C) e cabeçalho com chave de NF-e'],
@@ -504,8 +514,13 @@ const regrasCat = [
 ];
 const ORDEM_REAL = ['FOLHA_INTEGRADA', 'CTE_FRETE', 'NOTA_FISCAL', 'NOTA_SERVICO', 'GUIA_ENCARGO_FOLHA', 'FOLHA_PAGAMENTO', 'GUIA_IMPOSTO', 'ADIANTAMENTO', 'DEBITO_AUTOMATICO_TARIFA', 'BOLETO', 'NOTA_OUTRA_OPERACAO', 'OUTRO_FINANCEIRO'];
 regrasCat.sort((a, b) => ORDEM_REAL.indexOf(a[0]) - ORDEM_REAL.indexOf(b[0]));
-regrasCat.forEach(([c, regra], i) => rg.push(`| ${i + 1} | ${ROT_CAT[c]} | ${regra} | ${totalDocsCat[c] ?? 0} | ${['FOLHA_INTEGRADA', 'GUIA_ENCARGO_FOLHA', 'FOLHA_PAGAMENTO', 'GUIA_IMPOSTO', 'CTE_FRETE', 'NOTA_FISCAL'].includes(c) ? 'ALTA (grupo contábil + descrição)' : c === 'OUTRO_FINANCEIRO' ? 'BAIXA (residual)' : 'MEDIA'} |`));
-rg.push(`\nPara o sistema: os quatro tipos atuais não cobrem CT-e, nota de serviço, encargo de folha, adiantamento e débito automático (${['CTE_FRETE', 'NOTA_SERVICO', 'GUIA_ENCARGO_FOLHA', 'ADIANTAMENTO', 'DEBITO_AUTOMATICO_TARIFA'].reduce((s, c) => s + (totalDocsCat[c] ?? 0), 0)} documentos no período). Criar tipos novos é decisão de negócio (pendência). A folha de origem P já entra no ERP por integração (${totalDocsCat.FOLHA_INTEGRADA ?? 0} documentos) e não deve ser lançada de novo por documento.\n`);
+const CONF_REGRA = {
+  FOLHA_INTEGRADA: 'ALTA (origem, TOP e natureza coincidem)', CTE_FRETE: 'ALTA (chave de CT-e)', NOTA_FISCAL: 'ALTA (chave de NF-e)',
+  NOTA_SERVICO: 'MEDIA (ausência de chave; inclui energia e nota sem XML)', GUIA_ENCARGO_FOLHA: 'ALTA (grupo contábil + descrição)', FOLHA_PAGAMENTO: 'ALTA (grupo contábil + descrição)',
+  GUIA_IMPOSTO: 'ALTA (grupo contábil, descrição ou tipo de título)', OUTRO_FINANCEIRO: 'BAIXA (residual)',
+};
+regrasCat.forEach(([c, regra], i) => rg.push(`| ${i + 1} | ${ROT_CAT[c]} | ${regra} | ${totalDocsCat[c] ?? 0} | ${CONF_REGRA[c] ?? 'MEDIA (descrição)'} |`));
+rg.push(`\nPara o sistema: os quatro tipos atuais não cobrem CT-e, encargo de folha, adiantamento e débito automático (${['CTE_FRETE', 'GUIA_ENCARGO_FOLHA', 'ADIANTAMENTO', 'DEBITO_AUTOMATICO_TARIFA'].reduce((s, c) => s + (totalDocsCat[c] ?? 0), 0)} documentos no período), e a nota de serviço (${totalDocsCat.NOTA_SERVICO ?? 0}) precisa de leitura própria. Criar tipos novos é decisão de negócio (pendências). A folha de origem P já entra no ERP por integração (${totalDocsCat.FOLHA_INTEGRADA ?? 0} documentos) e não deve ser lançada de novo por documento.\n`);
 
 rg.push(`## 2. O que é parâmetro e o que é padrão do fornecedor\n`);
 rg.push(`- **TOP:** vem do parâmetro por empresa e tipo; nunca do fornecedor. Onde a TOP dominante cobre pouco da categoria, a pessoa corrige no lançamento.`);
