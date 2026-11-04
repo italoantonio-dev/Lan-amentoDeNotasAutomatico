@@ -1,0 +1,569 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COMO PERSONALIZAR POR PROJETO
+   - A identidade do projeto e' --brand (claro e escuro). Accent, hover, fundo
+     suave, borda e anel derivam dela — nao edite os derivados.
+   - A estrutura (superficies, texto, bordas, raios, alturas, sombras, escala)
+     e' o design system e fica como esta, salvo pedido explicito do usuario.
+   - Tema claro e' o padrao. Escuro: class="dark" (ou data-theme="dark") no <html>.
+   - Fonte: Geist, carregada no index.html.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* O tema ativo vem de data-theme no <html>; a classe .dark acompanha para o
+   variante `dark:` do Tailwind. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DESIGN SYSTEM MITRA — tokens (tema claro)
+   Uma marca por ambiente: so --brand e' sobrescrito; accent, hover, fundo
+   suave, borda e anel derivam dela por color-mix.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+
+  --bg: #fafafb;
+  --bg-elevated: #ffffff;
+  --bg-sunken: #f4f3f6;
+  --bg-overlay: #0f0c1c8c;
+  --surface: #ffffff;
+  --surface-hover: #f7f6fa;
+  --surface-active: #f1eff5;
+  --surface-muted: #f4f3f6;
+
+  --border: #ececef;
+  --border-strong: #dcdbe1;
+  --border-subtle: #f1f0f3;
+
+  --fg: #15131c;
+  --fg-muted: #5a576a;
+  --fg-subtle: #716e7a; /* 4.8:1 sobre --bg (AA) */
+  --fg-disabled: #b3b1bc;
+  --fg-inverted: #ffffff;
+
+  --brand: #4b5563;
+  --accent: var(--brand);
+  --accent-hover: color-mix(in srgb, var(--brand) 88%, black);
+  --accent-soft: color-mix(in srgb, var(--brand) 8%, transparent);
+  --accent-soft-hover: color-mix(in srgb, var(--brand) 14%, transparent);
+  --accent-fg: #ffffff;
+  --accent-border: color-mix(in srgb, var(--brand) 32%, transparent);
+
+  --success: #1d9d6c;
+  --success-soft: #1d9d6c1a;
+  --warning: #c98a16;
+  --warning-soft: #c98a161a;
+  --danger: #d4322c;
+  --danger-soft: #d4322c1a;
+  --info: #2779d8;
+  --info-soft: #2779d81a;
+
+  --ring: color-mix(in srgb, var(--brand) 70%, transparent);
+
+  --shadow-sm: 0 1px 2px 0 #1412200a;
+  --shadow-md: 0 1px 2px #1412200a, 0 8px 24px -8px #14122014;
+  --shadow-lg: 0 4px 12px -4px #14122014, 0 24px 48px -12px #1412202e;
+  --shadow-pop: 0 24px 64px -16px #14122038, 0 8px 16px -8px #1412201f;
+
+  --chart-1: #7839ee;
+  --chart-2: #28a7f8;
+  --chart-3: #1d9d6c;
+  --chart-4: #c98a16;
+  --chart-5: #d4327f;
+  --chart-6: #5577f6;
+  --chart-7: #d4322c;
+  --chart-8: #0d9488;
+
+  /* Forma: um so lugar decide raio e altura de controle */
+  --raio-cartao: 20px;
+  --raio-controle: 12px;
+  --altura-controle: 36px;
+}
+
+/* ═══ Tokens — tema escuro ═══ */
+[data-theme="dark"], .dark {
+  color-scheme: dark;
+
+  --bg: #0b0c0e;
+  --bg-elevated: #16181b;
+  --bg-sunken: #07080a;
+  --bg-overlay: #000000a8;
+  --surface: #16181b;
+  --surface-hover: #1c1f22;
+  --surface-active: #202429;
+  --surface-muted: #111316;
+
+  --border: #20242a;
+  --border-strong: #2c3137;
+  --border-subtle: #0f1114;
+
+  --fg: #f1f3f5;
+  --fg-muted: #a5aab2;
+  --fg-subtle: #848b93; /* 5.2:1 sobre --surface (AA) */
+  --fg-disabled: #484d53;
+  --fg-inverted: #0b0c0e;
+
+  --brand: #a0a7b0;
+  --accent: var(--brand);
+  /* Marca clara no escuro: o texto sobre ela e' a tinta escura, nao branco */
+  --accent-fg: #0b0c0e;
+  --accent-hover: color-mix(in srgb, var(--brand) 80%, white);
+  --accent-soft: color-mix(in srgb, var(--brand) 14%, transparent);
+  --accent-soft-hover: color-mix(in srgb, var(--brand) 20%, transparent);
+  --accent-border: color-mix(in srgb, var(--brand) 40%, transparent);
+
+  --success: #2bbf85;
+  --success-soft: #2bbf8526;
+  --warning: #e3a232;
+  --warning-soft: #e3a23226;
+  --danger: #ec6863;
+  --danger-soft: #ec686326;
+  --info: #4d99ee;
+  --info-soft: #4d99ee26;
+
+  --ring: color-mix(in srgb, var(--brand) 70%, transparent);
+
+  --shadow-sm: 0 1px 2px 0 #0006;
+  --shadow-md: 0 1px 2px #0000004d, 0 8px 24px -8px #0006;
+  --shadow-lg: 0 4px 12px -4px #0006, 0 24px 48px -12px #0000008c;
+  --shadow-pop: 0 24px 64px -16px #000000b3, 0 8px 16px -8px #0006;
+
+  --chart-1: #a586ff;
+  --chart-2: #4ec0fb;
+  --chart-3: #2bbf85;
+  --chart-4: #e3a232;
+  --chart-5: #ed5a99;
+  --chart-6: #7796ff;
+  --chart-7: #ec6863;
+  --chart-8: #2dd4bf;
+}
+
+/* ═══ Apelidos (--color-*) e derivados — os nomes que o Chart.tsx e as telas usam ═══
+   Declarados tambem nos seletores do escuro para serem recalculados com os
+   valores do tema (sem isso, .dark num wrapper herdaria os valores claros). */
+:root, [data-theme="dark"], .dark {
+  /* Status como TEXTO (badge, rotulo): a cor cheia misturada com --fg passa AA
+     sobre o fundo -soft. A cor cheia continua para icone, dot, borda e grafico. */
+  --success-text: color-mix(in srgb, var(--success) 65%, var(--fg));
+  --warning-text: color-mix(in srgb, var(--warning) 65%, var(--fg));
+  --danger-text: color-mix(in srgb, var(--danger) 65%, var(--fg));
+  --info-text: color-mix(in srgb, var(--info) 65%, var(--fg));
+  --accent-text: color-mix(in srgb, var(--accent) 80%, var(--fg));
+
+  --color-primary: var(--accent);
+  --color-primary-hover: var(--accent-hover);
+  --color-primary-light: color-mix(in srgb, var(--brand) 55%, white);
+  --color-primary-bg: var(--accent-soft);
+  --color-primary-soft: var(--accent-soft-hover);
+  --color-on-primary: var(--accent-fg);
+
+  --color-bg: var(--bg);
+  --color-bg-muted: var(--surface-muted);
+  --color-surface: var(--bg-elevated);
+  --color-hover: var(--surface-hover);
+
+  --color-nav: var(--bg-elevated);
+  --color-nav-text: var(--fg-muted);
+  --color-nav-active: var(--accent);
+  --color-nav-hover: var(--surface-hover);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-text: var(--fg);
+  --color-text-secondary: var(--fg-muted);
+  --color-text-muted: var(--fg-subtle);
+
+  --color-receita: var(--success);
+  --color-saldo-pos: var(--success);
+  --color-pago: var(--success);
+  --color-pendente: var(--warning);
+  --color-despesa: var(--danger);
+  --color-saldo-neg: var(--danger);
+  --color-atrasado: var(--danger);
+
+  --color-tick: var(--fg-subtle);
+  --color-label-muted: var(--fg-subtle);
+  --color-label-strong: var(--fg-muted);
+  --color-breadcrumb: var(--accent);
+  --color-breadcrumb-active: var(--fg);
+  --color-drill-hover: var(--accent-soft);
+  --color-drill-text: var(--fg);
+
+  --kpi-bg-green: var(--success-soft);
+  --kpi-bg-blue: var(--info-soft);
+  --kpi-bg-cyan: var(--info-soft);
+  --kpi-bg-amber: var(--warning-soft);
+  --kpi-bg-purple: var(--accent-soft);
+  --kpi-bg-rose: var(--danger-soft);
+
+  --bg-hover: var(--surface-hover);
+  --shadow-card: var(--shadow-sm);
+  --shadow-modal: var(--shadow-pop);
+}
+
+/* ═══ Tokens como utilitarias Tailwind ═══
+   Nomes do design system (bg-surface, text-fg-muted, bg-success-soft…) e os
+   nomes do shadcn/ui (bg-background, bg-primary, text-muted-foreground,
+   border-input…), para que componentes trazidos pelo MCP do shadcn ja nascam
+   no design system.
+   Atencao: no Tailwind, `bg-accent` e' o HOVER NEUTRO do shadcn (= --surface-hover),
+   nao a marca. Marca = `bg-primary` / `text-primary` ou var(--accent). */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-sunken: var(--bg-sunken);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-disabled: var(--fg-disabled);
+  --color-fg-inverted: var(--fg-inverted);
+  --color-brand: var(--accent);
+  --color-brand-hover: var(--accent-hover);
+  --color-brand-soft: var(--accent-soft);
+  --color-brand-border: var(--accent-border);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ring: var(--ring);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-danger-text: var(--danger-text);
+  --color-info-text: var(--info-text);
+
+  /* shadcn/ui */
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--bg-elevated);
+  --color-card-foreground: var(--fg);
+  --color-popover: var(--bg-elevated);
+  --color-popover-foreground: var(--fg);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-fg);
+  --color-secondary: var(--surface-muted);
+  --color-secondary-foreground: var(--fg);
+  --color-muted: var(--surface-muted);
+  --color-muted-foreground: var(--fg-muted);
+  --color-accent: var(--surface-hover);
+  --color-accent-foreground: var(--fg);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--fg-inverted);
+  --color-input: var(--border);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--bg-elevated);
+  --color-sidebar-foreground: var(--fg-muted);
+  --color-sidebar-primary: var(--accent);
+  --color-sidebar-primary-foreground: var(--accent-fg);
+  --color-sidebar-accent: var(--accent-soft);
+  --color-sidebar-accent-foreground: var(--accent);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 28px;
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-pop: var(--shadow-pop);
+  --font-sans: "Geist", "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ═══ Base do design system ═══ */
+@layer base {
+  /* Cursor diz o que e' clicavel; desabilitado mostra not-allowed. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="switch"]:not(:disabled),
+  [role="checkbox"]:not(:disabled),
+  [role="tab"], a[href],
+  select:not(:disabled), summary, label[for] { cursor: pointer; }
+  button:disabled, select:disabled,
+  [role="switch"]:disabled, [role="checkbox"]:disabled { cursor: not-allowed; }
+
+  svg.lucide { stroke-width: 1.75px; }
+
+  ::selection { background-color: var(--accent-soft-hover); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  input:focus-visible, textarea:focus-visible,
+  select:focus-visible, [role="combobox"]:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 5px var(--ring);
+    border-color: var(--accent) !important;
+  }
+}
+
+/* ═══ Pecas do design system ═══ */
+/* Em @layer components: uma utilitaria na mesma tag (h-10, pl-9…) vence a peca. */
+@layer components {
+  /* Skeleton — shimmer de carregamento (components/ui/Skeleton.tsx) */
+  .skeleton {
+    border-radius: 12px;
+    background: linear-gradient(100deg, var(--surface-muted) 40%, var(--surface-active) 50%, var(--surface-muted) 60%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+  }
+  @keyframes skeleton-shimmer {
+    to { background-position: -200% 0; }
+  }
+
+  .cartao {
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--raio-cartao);
+    box-shadow: var(--shadow-sm);
+  }
+  .cartao-vivo { transition: border-color .2s, box-shadow .25s, transform .2s; }
+  .cartao-vivo:hover {
+    border-color: var(--accent-border);
+    box-shadow: 0 0 0 1px var(--accent-border),
+                0 12px 32px -12px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+
+  .nav-item {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: var(--altura-controle); padding: 0 10px;
+    border-radius: var(--raio-controle); font-size: 14px;
+    color: var(--fg-muted);
+    transition: background-color .15s, color .15s;
+    white-space: nowrap; min-width: 0;
+  }
+  .nav-item:hover { background-color: var(--surface-hover); color: var(--fg); }
+  .nav-item[data-active="true"] { background-color: var(--accent-soft); color: var(--accent); }
+  .nav-item[data-active="true"]:hover { background-color: var(--accent-soft-hover); }
+  .nav-icone { width: 36px; padding: 0; justify-content: center; }
+
+  .popover {
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-pop);
+  }
+  .popover-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 12px; font-size: 13px; text-align: left;
+    color: var(--fg); transition: background-color .12s;
+  }
+  .popover-item:hover { background-color: var(--surface-hover); }
+
+  .rotulo-secao {
+    font-size: 12px; font-weight: 500; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--fg-subtle);
+  }
+
+  .pilula {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 24px; padding: 0 9px; border-radius: 9999px;
+    font-size: 12px; font-weight: 500;
+    background-color: var(--surface-muted); color: var(--fg-muted);
+  }
+  .pilula-acento { background-color: var(--accent-soft); color: var(--accent); }
+
+  .tabela { width: 100%; font-size: 14px; border-collapse: collapse; }
+  .tabela thead th {
+    text-align: left; font-size: 12px; font-weight: 500;
+    color: var(--fg-subtle); padding: 10px 16px;
+    background-color: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+    border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
+  }
+  .tabela tbody td { padding: 12px 16px; border-top: 1px solid var(--border-subtle); vertical-align: middle; }
+  .tabela tbody tr { transition: background-color .12s; }
+  .tabela tbody tr:hover { background-color: var(--surface-hover); }
+
+  .controle {
+    height: var(--altura-controle); padding: 0 12px;
+    border-radius: var(--raio-controle); font-size: 14px;
+    background-color: var(--bg-elevated);
+    border: 1px solid var(--border); color: var(--fg);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .controle::placeholder { color: var(--fg-subtle); }
+  .controle-com-icone { padding-left: 36px; }
+  .controle:hover { border-color: var(--border-strong); }
+  .controle:disabled { opacity: .5; }
+}
+
+/* ── Cor padrao de borda ──
+   O Tailwind 4 mudou o default de `border-color` para `currentColor`. Sem este
+   bloco, qualquer `border-*`/`divide-*` sem cor explicita herda a cor do TEXTO
+   (linhas pretas grossas em tabelas e separadores). Em @layer base para que as
+   utilitarias de cor de borda continuem vencendo. */
+@layer base {
+  *,
+  ::after,
+  ::before {
+    border-color: var(--border);
+  }
+}
+
+html { background-color: var(--bg); }
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: "Geist", "Geist Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar — 8px, polegar com 2px de "borda" transparente */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background-color: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong); border-radius: 9999px;
+  border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--fg-subtle); }
+
+/* ═══ Movimento — entradas curtas, ease-out ═══ */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+.animate-scaleIn { animation: scaleIn 0.18s ease-out; }
+.animate-slideIn { animation: slideIn 0.3s ease-out; }
+.animate-slideInLeft { animation: slideInLeft 0.3s ease-out; }
+.animate-riseIn { animation: riseIn 0.25s ease-out; }
+.animate-slideUp { animation: slideUp 0.25s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn, .animate-scaleIn, .animate-slideIn,
+  .animate-slideInLeft, .animate-riseIn, .animate-slideUp, .skeleton { animation: none; }
+}
+
+/* ── Celulas editaveis em tabela ──────────────────────────────────────
+   O campo parece texto comum enquanto ninguem interage: sem caixa, sem
+   borda, alinhado com as demais celulas. O fundo aparece de leve no hover
+   (sinalizando que da para editar) e a borda so no foco, durante a edicao.
+   Uma borda permanente por celula transforma a tabela num formulario. */
+.celula-inline {
+  border-color: transparent;
+  background-color: transparent;
+}
+.celula-inline:hover:not(:disabled):not(:focus) {
+  background-color: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.celula-inline:focus {
+  background-color: var(--color-surface);
+  border-color: var(--color-primary);
+}
+/* Marca de campo: um pontilhado fino sob o PROPRIO VALOR (nao sob a celula
+   inteira), so nas celulas onde se digita ou se escolhe. Sem ele o valor fica
+   indistinguivel de texto fixo e ninguem descobre que da para editar; com uma
+   caixa por celula a tabela vira formulario. O pontilhado acompanha a largura
+   do texto, entao a coluna continua se lendo como coluna.
+   Durante a digitacao ele sai de cena: a borda de foco ja marca o campo. */
+.celula-inline-marca:not(:disabled):not(:focus) {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--color-text) 35%, transparent);
+  text-underline-offset: 4px;
+}
+.celula-inline-marca:hover:not(:disabled):not(:focus) {
+  text-decoration-color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+/* Seta do seletor: discreta, aparece quando o ponteiro passa pela linha. */
+.celula-inline-seta { opacity: 0; }
+tr:hover .celula-inline-seta,
+.celula-inline:focus ~ .celula-inline-seta { opacity: 0.5; }
+
+/* ── Utility class for chart labels (shadcn pattern) ── */
+.fill-foreground { fill: var(--color-text); }
+
+/* ── Recharts: Eixos — garantir que ticks e axis labels apareçam ── */
+/* TW4 Preflight reseta `border: 0 solid` em `*` e `display: block` em `svg`.
+   Isso pode quebrar elementos SVG internos do Recharts. Override necessário: */
+.recharts-wrapper text,
+.recharts-wrapper tspan {
+  fill: var(--color-tick);
+  font-size: 12px;
+  border: initial;
+}
+.recharts-xAxis,
+.recharts-yAxis,
+.recharts-cartesian-axis {
+  visibility: visible !important;
+  display: initial !important;
+}
+.recharts-cartesian-axis-tick {
+  visibility: visible !important;
+}
+.recharts-cartesian-axis-tick text,
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-tick) !important;
+  font-size: 12px;
+  visibility: visible !important;
+}
+.recharts-cartesian-axis-line {
+  stroke: var(--color-border) !important;
+}
+
+/* ── Recharts: NUNCA borda/outline preta em nenhum chart ── */
+/* SVG container — matar focus ring do accessibilityLayer */
+.recharts-wrapper,
+.recharts-wrapper svg,
+.recharts-wrapper svg:focus,
+.recharts-wrapper svg:focus-visible,
+.recharts-wrapper svg:active,
+.recharts-surface,
+.recharts-surface:focus,
+.recharts-surface:focus-visible {
+  outline: none !important;
+  border: none !important;
+}
+/* Barras — nunca stroke/outline */
+.recharts-bar-rectangle path,
+.recharts-bar-rectangle rect,
+.recharts-active-bar path,
+.recharts-active-bar rect,
+.recharts-rectangle {
+  stroke: none !important;
+  outline: none !important;
+}
+.recharts-bar-rectangle,
+.recharts-bar-rectangle:focus,
+.recharts-bar-rectangle:active,
+.recharts-bar-rectangle:focus-visible,
+.recharts-active-bar,
+.recharts-active-bar:focus,
+.recharts-active-bar:active,
+.recharts-active-bar:focus-visible {
+  outline: none !important;
+}
+/* Pie — sem stroke, sem outline */
+.recharts-pie-sector,
+.recharts-pie-sector:focus,
+.recharts-pie-sector:active,
+.recharts-pie-sector:focus-visible,
+.recharts-pie-sector g {
+  outline: none !important;
+  stroke: none !important;
+}
+.recharts-pie-sector path {
+  stroke: none !important;
+  stroke-width: 0 !important;
+}
