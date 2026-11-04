@@ -5,13 +5,23 @@ import { montarJS, lerSF, NONCE } from '../lib/base.mjs';
 const BASE = ['sf/_comum.js', 'sf/_erp.js'];
 const MOTOR = `const leitura = (function () { ${lerSF('robo/leitura.cjs').replace('module.exports =', 'return')}\n })();`;
 const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', ...arquivos)).replace('/*__MOTOR__*/', () => MOTOR);
+// Conferencia com pedidos: leitor de NF-e e motor de correspondencia entram inteiros, como no robo.
+const MOTOR_CORRESPONDENCIA = `const correspondencia = (function () { ${lerSF('correspondencia/motor.cjs').replace('module.exports =', 'return')}\n })();`;
+const COM_CORRESPONDENCIA = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_correspondencia.js', ...arquivos))
+  .replace('/*__MOTOR__*/', () => MOTOR).replace('/*__MOTOR_CORRESPONDENCIA__*/', () => MOTOR_CORRESPONDENCIA);
 
 // nome -> arquivos (na ordem dos scripts de origem). description so onde a Fase 0 mudou o texto;
 // nas demais, aplicar.mjs mantem a descricao publicada.
 export const JS_COM_ERP = {
+  // Nova nas Fases 1 e 2 (nao existe na copia de reversao). Vem primeiro: o envio a chama.
+  conferirNfePedidos: {
+    correspondencia: 'sf/conferirNfePedidos.js',
+    nova: true,
+    description: 'Confere uma NF-e com os pedidos de compra do piloto (TOP 1314 para 1419/1420). SOMENTE LEITURA: nao cria nota, nao altera pedido, nao gera provisao. Parametros: lancamentoId (numero) OU nome e conteudoB64 (XML da NF-e). Devolve candidatos, itens, quantidades negociada/entregue/pendente, precos, divergencias, vinculos, ambiguidade e duplicidade.',
+  },
   enviarLancamentoParaErp: {
     arquivos: [...BASE, 'sf/enviarLancamentoParaErp.js'],
-    description: 'Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar. Gravacao no ERP desligada (Fase 0): sem simular a funcao recusa com GRAVACAO_BLOQUEADA. Nota de entrada nunca e criada aqui. Parametros: lancamentoId (numero); simular (S); opcional codparc.',
+    description: 'Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar; nota de entrada e conferida com os pedidos de compra. Gravacao no ERP desligada (Fase 0): sem simular recusa com GRAVACAO_BLOQUEADA. Criacao de nota bloqueada ate homologacao. Parametros: lancamentoId (numero); simular (S); opcional codparc.',
   },
   corrigirCadastroErp: {
     arquivos: [...BASE, 'sf/corrigirCadastroErp.js'],
@@ -37,7 +47,11 @@ export const JS_COM_ERP = {
 };
 
 // Indicadores da Caixa de entrada: o robo deixou de lancar; conta o que ficou pronto para conferencia.
+// podeConferirNfe: mesmo alcance por tipo das telas (secao 13.1), para o tipo NOTA_FISCAL.
 export const SQL_ALTERADAS = {
+  podeConferirNfe: `SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM PERMISSOES_USUARIO PU WHERE PU.USUARIO_ID = :VAR_USER AND PU.TODOS_OS_TIPOS = FALSE)
+     OR EXISTS (SELECT 1 FROM PERMISSAO_TIPO_DOCUMENTO PT JOIN TIPOS_DOCUMENTO T ON T.ID = PT.TIPO_DOCUMENTO_ID WHERE PT.USUARIO_ID = :VAR_USER AND T.CODIGO = 'NOTA_FISCAL')
+     THEN 1 ELSE 0 END AS PODE FROM DUAL WHERE ${NONCE}`,
   roboKpis: `SELECT COUNT(*) AS LIDOS,
      COALESCE(SUM(A.DECISAO = 'LANCADO'), 0) AS LANCADOS,
      COALESCE(SUM(A.DECISAO = 'PRONTO'), 0) AS PRONTOS,
@@ -51,5 +65,6 @@ export const SQL_ALTERADAS = {
 export async function codigoEsperado(nome) {
   const f = JS_COM_ERP[nome];
   if (!f) throw new Error(`SF fora da Fase 0: ${nome}`);
+  if (f.correspondencia) return COM_CORRESPONDENCIA(f.correspondencia);
   return f.motor ? COM_MOTOR(f.motor) : montarJS(...f.arquivos);
 }

@@ -37,6 +37,7 @@ const ocorrencias = (texto, re) => (texto.match(re) || []).length;
 console.log('\n--- A. Fonte ---');
 const erpJs = ler('backend/sf/_erp.js');
 conf('trava geral desligada no adaptador', /^const GRAVACAO_ERP_HABILITADA = false;$/m.test(erpJs));
+conf('trava temporaria de criacao de nota desligada', /^const CRIACAO_NOTA_HABILITADA = false;$/m.test(erpJs));
 conf('adaptador tem uma unica saida para a rede', ocorrencias(erpJs, /callIntegrationMitra/g) === 1);
 const sfs = arquivos('backend/sf', /\.js$/);
 const chamadoresRede = sfs.filter((a) => /callIntegrationMitra/.test(ler(a)));
@@ -66,7 +67,14 @@ const nomePorId = new Map([...idsPorNome.entries()].map(([n, i]) => [i, n]));
 
 function linhasErp(sql) {
   let colunas = ['N']; let dados = [[0]];
-  if (/FROM TGFPAR/.test(sql)) { colunas = ['CODPARC', 'NOMEPARC', 'RAZAOSOCIAL', 'CGC_CPF', 'FORNECEDOR', 'CLIENTE', 'ATIVO']; dados = [[10, 'P', 'Parceiro', '11222333000181', 'S', 'N', 'S']]; }
+  if (/MOTIVO/.test(sql)) { colunas = ['NUNOTA', 'NUMNOTA', 'SERIENOTA', 'CODTIPOPER', 'STATUSNOTA', 'MOTIVO']; dados = []; }
+  else if (/FROM TGFPAP/.test(sql)) { colunas = ['CODPARC', 'CODPROPARC', 'CODPROD']; dados = [[10, 'ABC-1', 500]]; }
+  else if (/FROM TGFPRO WHERE/.test(sql)) { colunas = ['CODPROD', 'REFFORN', 'REFERENCIA']; dados = []; }
+  else if (/FROM TGFVAR V/.test(sql)) { colunas = ['NUNOTAORIG', 'SEQUENCIAORIG', 'NUNOTA', 'SEQUENCIA', 'QTDATENDIDA', 'NUMNOTA', 'CODTIPOPER', 'STATUSNOTA', 'DTNEG']; dados = []; }
+  else if (/FROM TGFCAB C JOIN TGFITE I/.test(sql)) {
+    colunas = ['NUNOTA', 'NUMNOTA', 'CODEMP', 'CODPARC', 'DTNEG', 'CODTIPOPER', 'STATUSNOTA', 'SEQUENCIA', 'CODPROD', 'DESCRPROD', 'QTDNEG', 'QTDENTREGUE', 'VLRUNIT', 'CODVOL', 'PENDENTE'];
+    dados = [[2001, 55, 1, 10, '2026-01-01', 1314, 'L', 1, 500, 'Produto', 10, 0, 10, 'UN', 'S']];
+  } else if (/FROM TGFPAR/.test(sql)) { colunas = ['CODPARC', 'NOMEPARC', 'RAZAOSOCIAL', 'CGC_CPF', 'FORNECEDOR', 'CLIENTE', 'ATIVO']; dados = [[10, 'P', 'Parceiro', '11222333000181', 'S', 'N', 'S']]; }
   else if (/FROM TGFTOP/.test(sql)) { colunas = ['DH']; dados = [['01/01/2026 00:00:00']]; }
   else if (/AS CHAVE FROM/.test(sql)) { colunas = ['CHAVE']; dados = []; }
   return { statusCode: 200, body: { status: '1', responseBody: { fieldsMetadata: colunas.map((name) => ({ name })), rows: dados } } };
@@ -104,6 +112,7 @@ const respostasEnvio = (o) => ({ erpDadosEnvio: async () => ({ rows: [dadosEnvio
 
 const codEnviar = await codigoEsperado('enviarLancamentoParaErp');
 const codCorrigir = await codigoEsperado('corrigirCadastroErp');
+const codConferir = await codigoEsperado('conferirNfePedidos');
 const adaptador = await montarJS('sf/_comum.js', 'sf/_erp.js');
 
 // B1. A porta unica, chamada direto
@@ -161,11 +170,16 @@ for (const [rotulo, event] of [
   conf(`envio real (${rotulo}) recusa com GRAVACAO_BLOQUEADA`, r.ok === false && r.motivo === 'GRAVACAO_BLOQUEADA', r.motivo);
   conf(`envio real (${rotulo}) sem rede e sem reserva`, a.rede.length === 0 && !a.sfs.some((s) => /erpReservarEnvio|erpRegistrarEnvio|erpConcluirEnvio/.test(s.nome)));
 }
-for (const event of [{ lancamentoId: 1 }, { lancamentoId: 1, simular: 'S' }]) {
+{
   const a = ambiente(respostasEnvio({ DESTINO_ERP: 'NOTA' }));
-  const r = await a.rodar(codEnviar, event);
-  conf(`nota ${event.simular ? 'na conferencia' : 'no envio real'} recusa com NOTA_PROIBIDA`, r.ok === false && r.motivo === 'NOTA_PROIBIDA', r.motivo);
-  conf(`nota ${event.simular ? 'na conferencia' : 'no envio real'} sem rede`, a.rede.length === 0);
+  const r = await a.rodar(codEnviar, { lancamentoId: 1 });
+  conf('nota no envio real recusa com GRAVACAO_BLOQUEADA, sem rede', r.ok === false && r.motivo === 'GRAVACAO_BLOQUEADA' && a.rede.length === 0, r.motivo);
+}
+{
+  const a = ambiente({ ...respostasEnvio({ DESTINO_ERP: 'NOTA' }), conferirNfePedidos: async () => ({ ok: true, origem: 'teste', resultado: { situacao: 'PEDIDO_UNICO', resumo: 'Todos os itens correspondem ao mesmo pedido.' } }) });
+  const r = await a.rodar(codEnviar, { lancamentoId: 1, simular: 'S' });
+  conf('nota na conferencia vai para a correspondencia com pedidos', r.ok === true && r.simulado === true && r.entidade === 'CorrespondenciaPedido' && r.correspondencia.situacao === 'PEDIDO_UNICO', r.motivo ?? r.entidade);
+  conf('conferencia de nota nao reserva, nao registra envio e o envio nao chama a rede', a.rede.length === 0 && !a.sfs.some((x) => /erpReservarEnvio|erpRegistrarEnvio|erpConcluirEnvio/.test(x.nome)));
 }
 
 // B4. A conferencia segue funcionando e so le
@@ -208,6 +222,7 @@ async function rodadaDoRobo(codEnvio, destino) {
     ...respostasEnvio({ DESTINO_ERP: destino }),
     roboLerConfig: async () => ({ rows: [{ CHAVE: 'CORTE_CONFIANCA', VALOR: '0' }, { CHAVE: 'ATIVO', VALOR: 'S' }] }),
     roboEmpresas: async () => ({ rows: [{ ID: 1, CODEMP: 1, NOME: 'Empresa', CNPJ: '11444777000161' }] }),
+    podeConferirNfe: async () => ({ rows: [{ PODE: 1 }] }),
     listarTiposDocumento: async () => ({ rows: [{ ID: 1, CODIGO: 'NOTA_FISCAL' }, { ID: 2, CODIGO: 'BOLETO' }] }),
     roboEmailPorMensagem: async () => ({ rows: [{ ID: 1 }] }),
     roboObterExecucao: async () => ({ rows: [{ ID: 1 }] }),
@@ -219,9 +234,10 @@ async function rodadaDoRobo(codEnvio, destino) {
     },
   });
   a.sdk.executeServerFunctionMitra = (original => async (o) => {
-    if (nomePorId.get(o.serverFunctionId) === 'enviarLancamentoParaErp') {
-      a.sfs.push({ nome: 'enviarLancamentoParaErp', input: o.input });
-      return { result: { executionStatus: 'COMPLETED', output: await a.rodar(codEnvio, o.input) } };
+    const nome = nomePorId.get(o.serverFunctionId);
+    if (nome === 'enviarLancamentoParaErp' || nome === 'conferirNfePedidos') {
+      a.sfs.push({ nome, input: o.input });
+      return { result: { executionStatus: 'COMPLETED', output: await a.rodar(nome === 'enviarLancamentoParaErp' ? codEnvio : codConferir, o.input) } };
     }
     return original(o);
   })(a.sdk.executeServerFunctionMitra);
@@ -241,12 +257,13 @@ async function rodadaDoRobo(codEnvio, destino) {
 }
 {
   const { a, anexos } = await rodadaDoRobo(codEnviar, 'NOTA');
-  conf('nota lida pelo robo vira NOTA_PEDIDO, nao erro', anexos.length === 1 && anexos[0].decisao === 'NOTA_PEDIDO', anexos[0]?.decisao);
-  conf('nota lida pelo robo nao toca o ERP', a.rede.filter((r) => r.connection === 'sankhya').length === 0);
+  conf('nota lida pelo robo e conferida com pedidos e vira NOTA_PEDIDO', anexos.length === 1 && anexos[0].decisao === 'NOTA_PEDIDO' && /conferida com os pedidos/.test(anexos[0].motivo), anexos[0]?.motivo);
+  conf('nota lida pelo robo so consulta o ERP', a.gravacoes().length === 0 && a.sfs.some((x) => x.nome === 'conferirNfePedidos'));
 }
 
 // B7. Prova inversa: as travas sao independentes e o teste enxerga gravacao.
 const ligada = (c) => { const n = c.replace('const GRAVACAO_ERP_HABILITADA = false;', 'const GRAVACAO_ERP_HABILITADA = true;'); if (n === c) throw new Error('nao achei a trava no codigo'); return n; };
+const ambasLigadas = (c) => { const n = ligada(c).replace('const CRIACAO_NOTA_HABILITADA = false;', 'const CRIACAO_NOTA_HABILITADA = true;'); if (n === ligada(c)) throw new Error('nao achei a trava de nota'); return n; };
 {
   const a = ambiente(respostasEnvio());
   const r = await a.rodar(ligada(codEnviar), { lancamentoId: 1 });
@@ -263,7 +280,22 @@ const ligada = (c) => { const n = c.replace('const GRAVACAO_ERP_HABILITADA = fal
 {
   const a = ambiente(respostasEnvio({ DESTINO_ERP: 'NOTA' }));
   const r = await a.rodar(ligada(codEnviar), { lancamentoId: 1 });
-  conf('nota segue proibida mesmo com a trava ligada', r.motivo === 'NOTA_PROIBIDA' && a.gravacoes().length === 0, r.motivo);
+  conf('com a trava geral ligada, a nota para na trava temporaria de criacao', r.motivo === 'CRIACAO_NOTA_BLOQUEADA' && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente(respostasEnvio({ DESTINO_ERP: 'NOTA' }));
+  const r = await a.rodar(ambasLigadas(codEnviar), { lancamentoId: 1 });
+  conf('com as duas travas ligadas, nota ainda nao tem caminho de gravacao (faturamento nao implementado)', r.motivo === 'FATURAMENTO_NAO_IMPLEMENTADO' && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente();
+  const sonda = `${ligada(adaptador)}
+    const out = {};
+    for (const e of ['CabecalhoNota', 'ItemNota', 'Financeiro']) { try { await erpSalvar(e, { CODEMP: 1 }, e === 'Financeiro' ? 'NUFIN' : 'NUNOTA'); out[e] = 'PASSOU'; } catch (x) { out[e] = x.codigo || msgErro(x); } }
+    return out;`;
+  const r = await a.rodar(sonda);
+  conf('na porta unica, nota para na trava de criacao mesmo com a geral ligada', r.CabecalhoNota === 'CRIACAO_NOTA_BLOQUEADA' && r.ItemNota === 'CRIACAO_NOTA_BLOQUEADA', JSON.stringify(r));
+  conf('prova inversa: o titulo passa com a geral ligada e o teste enxerga', r.Financeiro === 'PASSOU' && a.gravacoes().length === 1);
 }
 {
   const { a, anexos } = await rodadaDoRobo(ligada(codEnviar), 'FINANCEIRO');
@@ -273,6 +305,42 @@ const ligada = (c) => { const n = c.replace('const GRAVACAO_ERP_HABILITADA = fal
   const a = ambiente();
   const r = await a.rodar(`${ligada(adaptador)} try { await erpChamar('CACSP.confirmarNota', {}); return 'PASSOU'; } catch (e) { return e.codigo; }`);
   conf('confirmar nota segue proibido mesmo com a trava ligada', r === 'CONFIRMACAO_PROIBIDA' && a.rede.length === 0, r);
+}
+
+// B8. Conferencia de NF-e com pedidos: so le, mesmo com entrada hostil.
+const SF_LEITURA_CONFERENCIA = ['podeConferirNfe', 'erpDadosEnvio', 'keyArquivoDocumento', 'listarItensLancamento', 'roboEmpresas'];
+const xmlNfe = (itens, extra = '') => `<?xml version="1.0"?><nfeProc><NFe><infNFe Id="NFe35260111222333000181550010000000011123456789"><ide><nNF>1${extra}</nNF><serie>1</serie><dhEmi>2026-01-10T10:00:00-03:00</dhEmi></ide><emit><CNPJ>11222333000181</CNPJ><xNome>F</xNome></emit><dest><CNPJ>11444777000161</CNPJ></dest>${itens.map((i, k) => `<det nItem="${k + 1}"><prod><cProd>${i.c}</cProd><cEAN>${i.ean ?? 'SEM GTIN'}</cEAN><xProd>Item</xProd><uCom>UN</uCom><qCom>${i.q ?? 10}</qCom><vUnCom>${i.v ?? 10}</vUnCom><vProd>100</vProd></prod></det>`).join('')}<total><ICMSTot><vNF>100</vNF></ICMSTot></total></infNFe></NFe></nfeProc>`;
+const respConferencia = (o = {}) => ({ podeConferirNfe: async () => ({ rows: [{ PODE: 1 }] }), roboEmpresas: async () => ({ rows: [{ ID: 1, CODEMP: 1, NOME: 'Empresa', CNPJ: '11444777000161' }] }), ...o });
+const so = (a) => a.sfs.every((x) => SF_LEITURA_CONFERENCIA.includes(x.nome));
+{
+  const a = ambiente(respConferencia({ podeConferirNfe: async () => ({ rows: [{ PODE: 0 }] }) }));
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('conferencia sem permissao recusa antes de ler o ERP', r.ok === false && a.rede.length === 0);
+}
+{
+  const a = ambiente(respConferencia());
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('conferencia de XML encontra o pedido pelo de-para', r.ok === true && r.resultado.situacao === 'PEDIDO_UNICO' && r.resultado.pedidos[0].NUNOTA === 2001, r.erro ?? r.resultado?.situacao);
+  conf('conferencia de XML: so leituras no ERP e so funcoes de leitura aqui', a.gravacoes().length === 0 && a.rede.every((x) => x.body.serviceName === LEITURA) && so(a), a.sfs.map((x) => x.nome).join(','));
+}
+{
+  const hostis = [{ c: "X' OR '1'='1" }, { c: "Y'); DELETE FROM TGFCAB --" }, { c: 'Z/* comentario */' }, { c: 'W;DROP TABLE ZZ_PROBE' }, { c: 'A'.repeat(300) }, { c: '', ean: "789' OR 1=1" }];
+  const a = ambiente(respConferencia());
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe(hostis, " OR 1=1")).toString('base64') });
+  const sqls = a.rede.map((x) => x.body.requestBody.sql);
+  const fora = sqls.map((q) => q.replace(/'(?:[^']|'')*'/g, "''")).filter((q) => /\b(DELETE|DROP|OR\s+'?1'?\s*=)|;|--|\/\*/i.test(q));
+  conf('XML hostil: a consulta segue so leitura e nada escapa das aspas', r.ok === true && sqls.length > 0 && fora.length === 0 && a.gravacoes().length === 0, fora[0] ?? r.erro ?? '');
+}
+{
+  const a = ambiente(respConferencia({ ...respostasEnvio(), listarItensLancamento: async () => ({ rows: [{ DESCRICAO: 'Item', QUANTIDADE: 10, VALOR_UNITARIO: 10, CODPROD: 500 }] }) }));
+  const r = await a.rodar(codConferir, { lancamentoId: 1 });
+  conf('conferencia pelo lancamento sem XML usa o produto informado', r.ok === true && /sem XML/.test(r.origem) && r.resultado.itens[0].identificacao.fonte === 'INFORMADO' && r.resultado.situacao === 'PEDIDO_UNICO', r.erro ?? r.resultado?.situacao);
+  conf('conferencia pelo lancamento: so leituras', a.gravacoes().length === 0 && so(a));
+}
+{
+  const a = ambiente(respConferencia());
+  const r = await a.rodar(ambasLigadas(codConferir), { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('conferencia nao grava nem com as duas travas ligadas em memoria', r.ok === true && a.gravacoes().length === 0);
 }
 
 // ---------------------------------------------------------------- C. Publicado
