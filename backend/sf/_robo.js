@@ -66,8 +66,11 @@ async function processarAnexo(ctx) {
 
   // Sempre 'S': a conferencia le o ERP e devolve o que seria enviado, sem reservar nem gravar.
   const envio = await chamar(SF.enviarLancamentoParaErp, { lancamentoId: criado.lancamentoId, simular: 'S' });
-  // Nota de entrada nao e erro do robo: ela nasce do pedido de compra, dentro do Sankhya.
-  if (envio && envio.motivo === 'NOTA_PROIBIDA') return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada. Este sistema não cria a nota; ela segue pelo pedido de compra no Sankhya, com confirmação por uma pessoa.', base);
+  // Nota de entrada: a conferencia compara com os pedidos de compra, so lendo. Nao e erro do robo.
+  if (envio && (envio.entidade === 'CorrespondenciaPedido' || envio.motivo === 'CONFERENCIA_FALHOU')) {
+    const sobre = envio.ok ? 'conferida com os pedidos: ' + envio.mensagem : 'a conferência com os pedidos não terminou: ' + envio.mensagem;
+    return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada ' + sobre + ' Nada foi criado no ERP.', base);
+  }
   if (simulacao) {
     if (envio && envio.ok) return fechar('SIMULADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: estaria pronto para conferência. Na simulação nada é gravado.', base);
     return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas a conferência parou: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);

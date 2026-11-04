@@ -53,9 +53,15 @@ function lerXml(texto) {
   const icmsTot = tag(texto, 'ICMSTot');
   const cobr = tag(texto, 'cobr');
   const dups = [...cobr.matchAll(/<(?:\w+:)?dup>([\s\S]*?)<\/(?:\w+:)?dup>/g)].map((m) => valorTag(m[1], 'dVenc')).filter(Boolean);
-  const itens = [...texto.matchAll(/<(?:\w+:)?det\b[^>]*>([\s\S]*?)<\/(?:\w+:)?det>/g)].map((m) => {
-    const prod = tag(m[1], 'prod');
-    return { descricao: valorTag(prod, 'xProd').slice(0, 300), quantidade: Number(valorTag(prod, 'qCom')) || 1, valorUnitario: Number(valorTag(prod, 'vUnCom')) || Number(valorTag(prod, 'vProd')) || 0, codprod: 0 };
+  // Codigo do fornecedor, GTIN e unidade alimentam a conferencia com pedidos; o nucleo de criacao
+  // so le descricao, quantidade, valor unitario e codprod.
+  const itens = [...texto.matchAll(/<(?:\w+:)?det\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?det>/g)].map((m) => {
+    const prod = tag(m[2], 'prod');
+    const nItem = (/nItem="(\d+)"/.exec(m[1]) || [])[1] || '';
+    return {
+      descricao: valorTag(prod, 'xProd').slice(0, 300), quantidade: Number(valorTag(prod, 'qCom')) || 1, valorUnitario: Number(valorTag(prod, 'vUnCom')) || Number(valorTag(prod, 'vProd')) || 0, codprod: 0,
+      nItem: nItem ? Number(nItem) : null, cProd: valorTag(prod, 'cProd').slice(0, 60), cEAN: valorTag(prod, 'cEAN').slice(0, 20), unidade: valorTag(prod, 'uCom').slice(0, 10), valorTotal: Number(valorTag(prod, 'vProd')) || 0,
+    };
   });
   const emissao = (valorTag(ide, 'dhEmi') || valorTag(ide, 'dEmi')).slice(0, 10);
   const valor = Number(valorTag(icmsTot, 'vNF')) || 0;
