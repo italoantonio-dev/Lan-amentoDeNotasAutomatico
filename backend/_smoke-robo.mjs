@@ -52,7 +52,7 @@ try {
 
   await ex('salvarParametro', entrada({ limite: 1000000 }));
   const dentro = await entregar('dentro.xml', xml(e.CNPJ, n() + 2, '10.00'));
-  conf('dentro da alcada, para no parceiro sem tocar no ERP', dentro.decisao === 'ERRO' && /envio pararia/.test(dentro.motivo), dentro.motivo);
+  conf('nota dentro da alcada segue pelo pedido, sem tocar no ERP', dentro.decisao === 'NOTA_PEDIDO' && /pedido de compra/.test(dentro.motivo), dentro.motivo);
 
   const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<< /Filter /DCTDecode /Length 3 >>\nstream\nabc\nendstream\nendobj\n', 'latin1').toString('latin1');
   const foto = await ex('roboProcessarAnexo', { nome: `${MARCA}-foto.pdf`, conteudoB64: Buffer.from(pdf, 'latin1').toString('base64') });
@@ -65,7 +65,8 @@ try {
   const lrev = await uma('obterLancamento', { id: abaixo.lancamentoId });
   conf('revisao de leitura e uma situacao do lancamento', lrev.STATUS === 'REVISAO_LEITURA', lrev.STATUS);
   const barrado = await ex('enviarLancamentoParaErp', { lancamentoId: abaixo.lancamentoId, simular: 'S' });
-  conf('revisao de leitura nao vai ao ERP', barrado.ok === false && barrado.motivo === 'REVISAO_LEITURA');
+  // Destino NOTA neste cenario: a recusa permanente de nota vem antes da guarda de revisao.
+  conf('revisao de leitura nao vai ao ERP', barrado.ok === false && ['REVISAO_LEITURA', 'NOTA_PROIBIDA'].includes(barrado.motivo), barrado.motivo);
 
   const fila = await rows('roboListarAnexos', { decisao: '', limite: 30, offset: 0 });
   conf('tudo aparece na caixa de entrada', fila.filter((a) => a.NOME.startsWith(MARCA)).length >= 6);

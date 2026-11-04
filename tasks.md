@@ -19,5 +19,15 @@
 | 22 | Testes | ✅ done | 12 smokes + motor de leitura, todos passando |
 | 23 | Documentação | ✅ done | §18 |
 | 4.x | Validações (segurança, SDKs, design, prompt) | ✅ done | featuresearquitetura.md |
-| — | Gravação real no ERP | ⏳ pending | primeira gravação feita por uma pessoa (ERP de produção) |
-| — | Apagar tabela de sondagem ZZ_PROBE | ⏳ pending | aguarda confirmação do usuário |
+| — | Gravação real no ERP | ⛔ bloqueada | desligada na Fase 0; religar exige autorização escrita |
+| — | Tabela de sondagem ZZ_PROBE | ✅ mantida | o usuário pediu para não excluir |
+
+## Módulo documental
+
+| # | Task | Status | Output |
+|---|------|--------|--------|
+| MD-A | Auditoria somente leitura dos parâmetros | ✅ done | auditoria/ |
+| MD-P | Proposta de arquitetura | ✅ aprovada com condições | modulo-documental/proposta-arquitetura.md |
+| MD-0 | Fase 0: travas de gravação, testes de bloqueio, reversão | ✅ done, aguarda validação | modulo-documental/fase0-plano-execucao.md |
+| MD-1/2 | Leitura e correspondência de pedidos (piloto TOP 1314 → 1419/1420), só consultas | ⏳ pending | começa após a validação da Fase 0 |
+| MD-3/4/5 | Faturamento, piloto e expansão | ⛔ não autorizadas | — |

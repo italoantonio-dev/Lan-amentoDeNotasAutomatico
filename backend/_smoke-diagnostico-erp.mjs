@@ -1,4 +1,4 @@
-// Tradutor da recusa e conferencia de cadastro. So le o ERP: a correcao grava no ERP e nao roda aqui.
+// Tradutor da recusa e conferencia de cadastro. So le o ERP: a correcao esta bloqueada desde a Fase 0.
 import { ex, conf, encerrar, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
 import { diagnosticar, limparMensagem } from '../frontend/src/lib/diagnosticoErp.ts';
 
@@ -16,7 +16,7 @@ try {
   const c = await ex('conferirCadastroErp', { lancamentoId: l.lancamentoId });
   conf('conferencia lista requisito a requisito', c.ok === true && c.requisitos.length === 3 && c.requisitos[0].pronto === false, c.requisitos?.[0]?.detalhe);
   const invalida = await ex('corrigirCadastroErp', { lancamentoId: l.lancamentoId, acao: 'MARCAR_FORNECEDOR', codparc: 1 });
-  conf('correcao recusa parceiro que nao tem o CNPJ do documento', invalida.ok === false, invalida.erro);
+  conf('correcao de cadastro esta bloqueada', invalida.ok === false && invalida.motivo === 'GRAVACAO_BLOQUEADA', invalida.erro);
 } finally {
   await limparLancamento(l.lancamentoId);
 }

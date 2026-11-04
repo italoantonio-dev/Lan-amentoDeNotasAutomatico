@@ -259,11 +259,11 @@ Cada fase só começa com a anterior aprovada. Nenhuma fase grava em produção 
 
 | # | Decisão | Proposta |
 |---|---|---|
-| D-01 | O "projeto externo" é este projeto ou outro sistema? | Supus que é este |
-| D-02 | Modelo de dados | **Single-tenant** (um único cliente, Grupo Lidon); o guia recomenda multitenant para produto vendido a vários clientes, o que não é o caso |
+| D-01 | O "projeto externo" é este projeto ou outro sistema? | **Aprovado (04/11/2026):** é este projeto; correspondência confirmada pelo repositório (ver `fase0-plano-execucao.md`) |
+| D-02 | Modelo de dados | **Aprovado (04/11/2026):** cliente único, Grupo Lidon, com segregação de dados, permissões e operações por empresa |
 | D-03 | Origem dos dados | API do Sankhya pelo gateway (já conectada); sem JDBC direto |
 | D-04 | Terá agente de IA para o usuário final? | Só como apoio de leitura e explicação; nunca decide nem grava |
-| D-05 | Quem decide quem entra pela tela do Sankhya | Lista de e-mails controlada pelo Grupo Lidon (segregação de funções) |
+| D-05 | Quem decide quem entra pela tela do Sankhya | **Aprovado (04/11/2026):** acesso restrito a usuários autorizados pelo Grupo Lidon; a lista de e-mails complementa, e não substitui, a autenticação, a autorização e as permissões do Sankhya |
 | D-06 | O produto já está cadastrado no Sankhya Pass? | Não; cadastro feito pela Sankhya, a pedido do desenvolvedor |
 
 ## 13. Pendências de validação técnica
@@ -286,9 +286,8 @@ Cada fase só começa com a anterior aprovada. Nenhuma fase grava em produção 
 | V-14 | Campo adicional na nota para o identificador do documento | TI do Sankhya | TI |
 | V-15 | O Sankhya guarda o vínculo entre código do produto do fornecedor e CODPROD? | Dicionário + documentação | TI + Compras |
 | V-16 | É possível abrir uma nota específica no Sankhya por link a partir da central? | Documentação / Sankhya Pass | TI |
+| V-17 | Um usuário business consegue chamar a integração `sankhya` direto do navegador, sem passar pelas funções do sistema? | Teste com usuário business, só com consulta | TI |
 
 ---
 
-**Aguardando aprovação da arquitetura.** Nenhum componente operacional será criado, nenhuma alteração será feita no
-módulo atual e nada será gravado no Sankhya antes da aprovação explícita — começando pela fase 0 (contenção), que também
-depende de autorização por mexer no comportamento do módulo atual.
+**Arquitetura conceitual aprovada em 04/11/2026, com condições.** A fase 0 foi autorizada com restrições e executada (`fase0-plano-execucao.md`). As fases 1 e 2 estão autorizadas para desenvolvimento, só com consultas ao Sankhya, depois da validação da fase 0. As fases 3, 4 e 5 não estão autorizadas. A aprovação da arquitetura não autoriza gravar no ERP de produção. Regra permanente: o sistema nunca confirma nota fiscal.

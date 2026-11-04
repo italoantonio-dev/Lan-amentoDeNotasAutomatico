@@ -13,6 +13,17 @@ const d = await uma(SF.erpDadosEnvio, { id });
 if (!d) return { ok: false, motivo: 'NAO_ENCONTRADO', mensagem: 'Lançamento não encontrado, ou fora dos tipos que você enxerga.' };
 const destino = d.DESTINO_ERP || d.DESTINO_PADRAO || 'FINANCEIRO';
 
+// FASE 0. Nota de entrada nao nasce aqui, nem na conferencia: ela vem do pedido de compra
+// dentro do Sankhya e so uma pessoa confirma. Recusa permanente, independente da trava geral.
+if (destino === 'NOTA') {
+  return recusar('NOTA_PROIBIDA', 'Este sistema não cria nota de entrada no ERP. A nota é gerada no Sankhya a partir do pedido de compra e confirmada por uma pessoa autorizada.');
+}
+// Com a gravacao desligada, o envio real para antes de qualquer reserva ou consulta.
+// A conferencia (simular) segue igual: le o ERP e mostra o que seria enviado.
+if (!simular && !GRAVACAO_ERP_HABILITADA) {
+  return recusar('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya. Use "Conferir sem gravar" para ver o que seria enviado.');
+}
+
 // 1. Ja enviado: devolve a chave existente em vez de criar um segundo titulo.
 const envios = d.ENVIOS_JSON ? (typeof d.ENVIOS_JSON === 'string' ? JSON.parse(d.ENVIOS_JSON) : d.ENVIOS_JSON) : [];
 const jaOk = envios.find((e) => e.STATUS === 'OK');
@@ -145,6 +156,11 @@ if (destino === 'FINANCEIRO') {
     return { ok: true, chave: nufin, destino, codparc };
   } catch (e) {
     const m = msgErro(e);
+    if (ehBloqueioErp(e)) {
+      // A trava parou antes da rede: o lancamento nao vira ERRO; a reserva expira em 5 minutos.
+      await log('ENVIO_ERP', 'RECUSADO', m);
+      return { ok: false, motivo: e.codigo, mensagem: m };
+    }
     await chamar(SF.erpRegistrarEnvio, { lancamentoId: id, destino, chave: '', numeroItens: 0, statusEnvio: 'ERRO', mensagem: texto(m, 1000) });
     await chamar(SF.erpConcluirEnvio, { id, status: 'ERRO', nufin: 0, nunota: 0 });
     await log('ENVIO_ERP', 'ERRO', m);
@@ -152,7 +168,8 @@ if (destino === 'FINANCEIRO') {
   }
 }
 
-// Destino NOTA: cabecalho e itens.
+// Destino NOTA: cabecalho e itens. Inalcancavel desde a Fase 0 (recusa NOTA_PROIBIDA no topo);
+// o codigo fica para referencia e nao deve ser religado: a nota nasce do pedido, no Sankhya.
 let codTipVenda = 0;
 try {
   const tv = await erpConsulta('SELECT CODTIPVENDA FROM (SELECT CODTIPVENDA FROM TGFCAB WHERE CODTIPOPER = ' + Number(d.CODTIPOPER) + ' AND CODEMP = ' + Number(d.CODEMP) + ' ORDER BY DTNEG DESC) WHERE ROWNUM = 1');

@@ -15,9 +15,15 @@ try {
   const r1 = await ex('enviarLancamentoParaErp', { lancamentoId: p.lancamentoId, simular: 'S' });
   conf('aguardando aprovacao nao envia', r1.ok === false && r1.motivo === 'AGUARDANDO_APROVACAO');
   // Guarda: sem classificacao
-  await ex('aplicarDecisaoAprovacao', { lancamentoId: p.lancamentoId, acao: 'APROVAR', motivo: '' });
-  const r2 = await ex('enviarLancamentoParaErp', { lancamentoId: p.lancamentoId, simular: 'S' });
-  conf('sem classificacao diz o que falta', r2.ok === false && r2.motivo === 'SEM_CLASSIFICACAO' && /TOP/.test(r2.mensagem), r2.mensagem);
+  // Depende de quem roda ser aprovador: com aprovadores cadastrados e sem vinculo, a aprovacao e
+  // recusada e a guarda fica coberta em memoria por _smoke-bloqueio-erp.mjs (B4).
+  const ap = await ex('aplicarDecisaoAprovacao', { lancamentoId: p.lancamentoId, acao: 'APROVAR', motivo: '' });
+  if (ap.ok) {
+    const r2 = await ex('enviarLancamentoParaErp', { lancamentoId: p.lancamentoId, simular: 'S' });
+    conf('sem classificacao diz o que falta', r2.ok === false && r2.motivo === 'SEM_CLASSIFICACAO' && /TOP/.test(r2.mensagem), r2.mensagem);
+  } else {
+    console.log(`INFO guarda de classificacao nao exercitada aqui: ${ap.erro}`);
+  }
 
   const top = (await consulta(`SELECT ID, CODTIPOPER FROM TOPS WHERE TIPMOV = 'I' AND ATIVO = TRUE ORDER BY CODTIPOPER DESC LIMIT 1`))[0];
   const nat = (await consulta(`SELECT ID FROM NATUREZAS WHERE ATIVO = TRUE AND CODNAT <> '0' LIMIT 1`))[0];

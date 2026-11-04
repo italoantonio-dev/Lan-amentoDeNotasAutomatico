@@ -94,6 +94,7 @@ await sfSQL(
   'roboKpis',
   `SELECT COUNT(*) AS LIDOS,
      COALESCE(SUM(A.DECISAO = 'LANCADO'), 0) AS LANCADOS,
+     COALESCE(SUM(A.DECISAO = 'PRONTO'), 0) AS PRONTOS,
      COALESCE(SUM(A.DECISAO = 'APROVACAO'), 0) AS APROVACAO,
      COALESCE(SUM(A.DECISAO = 'REVISAO'), 0) AS REVISAO,
      COALESCE(ROUND(AVG(A.CONFIANCA)), 0) AS CONFIANCA_MEDIA,
@@ -168,7 +169,7 @@ const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_er
 
 await sf('roboTestarCaixa', 'JAVASCRIPT', await montarJS('sf/_comum.js', 'sf/roboTestarCaixa.js'), 'Pergunta o perfil a API do e-mail e devolve o endereco e o total de mensagens. E esse o teste que vale para conector proprio.');
 await sf('roboProcessarAnexo', 'JAVASCRIPT', await COM_MOTOR('sf/roboProcessarAnexo.js'), 'Entrega um documento ao robo pela tela (modo simulacao): mesmo motor, mesma decisao e mesma trilha, sem gravar no ERP. Parametros: nome, conteudoB64.');
-await sf('roboVarrerEmails', 'JAVASCRIPT', await COM_MOTOR('sf/roboVarrerEmails.js'), 'Busca as notas na caixa de e-mail e processa os anexos. Grava no ERP o que passar pelo corte de leitura e pela alcada. So rode a pedido do usuario.');
+await sf('roboVarrerEmails', 'JAVASCRIPT', await COM_MOTOR('sf/roboVarrerEmails.js'), 'Busca as notas na caixa de e-mail e processa os anexos: le, classifica e confere sem gravar. Nunca grava no ERP nem confirma nota. So rode a pedido do usuario.');
 
 await sfJS('obterLinkArquivo', ['sf/_comum.js', 'sf/obterLinkArquivo.js'], 'Devolve um link temporario para o arquivo de um registro que o usuario pode ver. Parametros: origem (DOCUMENTO, ANEXO_CHAT ou ANEXO_ROBO) e id (numero).');
 fim('Robo pronto.');

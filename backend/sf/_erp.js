@@ -4,6 +4,52 @@ const SLUG_ERP = 'sankhya';
 const EP_CONSULTA = '/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json';
 const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.saveRecord&outputType=json';
 
+// FASE 0 (modulo-documental/fase0-plano-execucao.md): gravacao no ERP desligada.
+// Nenhum parametro de tela, de banco ou de input liga a gravacao: religar exige autorizacao
+// escrita e uma mudanca revisada nesta linha, publicada de novo em todas as SFs que usam este arquivo.
+const GRAVACAO_ERP_HABILITADA = false;
+// Unica porta de saida para o ERP. Servico fora desta lista nao sai, ligado ou desligado.
+const SERVICOS_ERP = {
+  'DbExplorerSP.executeQuery': { endpoint: EP_CONSULTA, leitura: true },
+  'CRUDServiceProvider.saveRecord': { endpoint: EP_SALVAR, leitura: false },
+};
+// Regra permanente: o sistema nunca confirma nota. Vale mesmo com a gravacao ligada.
+const SERVICO_DE_CONFIRMACAO = /confirm/i;
+// Defesa a mais na leitura: o texto entre aspas e ignorado (nome de parceiro pode conter "MERGE").
+// Comentario e recusado porque esconderia uma aspa dessa conta e, com ela, um segundo comando.
+const SQL_PROIBIDO_ERP = /\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|EXEC|EXECUTE|BEGIN|DECLARE|CALL|COMMIT|ROLLBACK|SAVEPOINT|LOCK|DBMS_\w+|UTL_\w+)\b|\bFOR\s+UPDATE\b|;|--|\/\*/i;
+
+function erroBloqueio(codigo, mensagem) {
+  const e = new Error(mensagem);
+  e.codigo = codigo;
+  return e;
+}
+const ehBloqueioErp = (e) => !!e && (e.codigo === 'GRAVACAO_BLOQUEADA' || e.codigo === 'CONFIRMACAO_PROIBIDA' || e.codigo === 'SERVICO_NAO_PERMITIDO' || e.codigo === 'SQL_NAO_E_LEITURA');
+
+function exigirSqlDeLeitura(sql) {
+  const semTexto = String(sql || '').replace(/'(?:[^']|'')*'/g, "''");
+  if (!/^\s*(SELECT|WITH)\b/i.test(semTexto) || SQL_PROIBIDO_ERP.test(semTexto)) {
+    throw erroBloqueio('SQL_NAO_E_LEITURA', 'Consulta ao ERP recusada: só SELECT, sem comando de gravação.');
+  }
+}
+
+// Toda chamada ao ERP passa aqui. As travas vem antes de qualquer rede.
+async function erpChamar(servico, requestBody) {
+  if (SERVICO_DE_CONFIRMACAO.test(String(servico))) {
+    throw erroBloqueio('CONFIRMACAO_PROIBIDA', 'Confirmar nota no ERP é exclusivo de uma pessoa, dentro do Sankhya. O sistema nunca confirma.');
+  }
+  const s = Object.prototype.hasOwnProperty.call(SERVICOS_ERP, servico) ? SERVICOS_ERP[servico] : null;
+  if (!s) throw erroBloqueio('SERVICO_NAO_PERMITIDO', 'Serviço do ERP fora da lista permitida: ' + String(servico).slice(0, 80) + '.');
+  if (!s.leitura && !GRAVACAO_ERP_HABILITADA) {
+    throw erroBloqueio('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya.');
+  }
+  if (s.leitura) exigirSqlDeLeitura(requestBody && requestBody.sql);
+  return sdk.callIntegrationMitra({
+    projectId: PROJECT_ID, connection: SLUG_ERP, method: 'POST', endpoint: s.endpoint,
+    body: { serviceName: servico, requestBody },
+  });
+}
+
 // O ERP devolve HTTP 200 mesmo recusando: o erro vem em statusMessage, sem responseBody.
 function lerResposta(r) {
   const http = Number(r && r.statusCode);
@@ -26,10 +72,7 @@ function linhasDoErp(body) {
 }
 
 async function erpConsulta(sql) {
-  const r = await sdk.callIntegrationMitra({
-    projectId: PROJECT_ID, connection: SLUG_ERP, method: 'POST', endpoint: EP_CONSULTA,
-    body: { serviceName: 'DbExplorerSP.executeQuery', requestBody: { sql } },
-  });
+  const r = await erpChamar('DbExplorerSP.executeQuery', { sql });
   return linhasDoErp(lerResposta(r));
 }
 
@@ -47,12 +90,9 @@ async function erpSalvar(entidade, campos, campoChave, chave) {
   }
   const dataRow = { localFields };
   if (chave) { dataRow.key = {}; dataRow.key[campoChave.split(',')[0]] = { $: String(chave) }; }
-  const r = await sdk.callIntegrationMitra({
-    projectId: PROJECT_ID, connection: SLUG_ERP, method: 'POST', endpoint: EP_SALVAR,
-    body: {
-      serviceName: 'CRUDServiceProvider.saveRecord',
-      requestBody: { dataSet: { rootEntity: entidade, includePresentationFields: 'N', dataRow, entity: { fieldset: { list: campoChave } } } },
-    },
+  // Passa pela porta unica: com a gravacao desligada, para aqui sem sair para a rede.
+  const r = await erpChamar('CRUDServiceProvider.saveRecord', {
+    dataSet: { rootEntity: entidade, includePresentationFields: 'N', dataRow, entity: { fieldset: { list: campoChave } } },
   });
   const b = lerResposta(r);
   const ent = b.responseBody && b.responseBody.entities && b.responseBody.entities.entity;

@@ -59,5 +59,5 @@ await sfSQL(
    WHERE L.ID = {{id}} AND S.CODIGO <> 'LANCADO' AND ${NONCE}`,
   'Guarda o parceiro escolhido por uma pessoa',
 );
-await sfJS('enviarLancamentoParaErp', ['sf/_comum.js', 'sf/_erp.js', 'sf/enviarLancamentoParaErp.js'], 'Grava o lancamento no ERP depois de passar por todas as guardas. Parametros: lancamentoId (numero); opcional codparc (parceiro escolhido por uma pessoa). Irreversivel: nunca chame sem pedido explicito do usuario.');
+await sfJS('enviarLancamentoParaErp', ['sf/_comum.js', 'sf/_erp.js', 'sf/enviarLancamentoParaErp.js'], 'Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar. Gravacao no ERP desligada (Fase 0): sem simular a funcao recusa com GRAVACAO_BLOQUEADA. Nota de entrada nunca e criada aqui. Parametros: lancamentoId (numero); simular (S); opcional codparc.');
 fim('Envio ao ERP pronto.');

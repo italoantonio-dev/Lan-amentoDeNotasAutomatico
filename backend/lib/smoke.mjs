@@ -44,6 +44,7 @@ export function conf(nome, ok, extra = '') {
   console.log(`${ok ? 'OK   ' : 'FALHA'} ${nome}${extra ? ` (${extra})` : ''}`);
   if (!ok) falhas++;
 }
+export const totalFalhas = () => falhas;
 export function encerrar(titulo) {
   console.log(falhas ? `\n${titulo}: ${falhas} falha(s).` : `\n${titulo}: tudo certo.`);
   process.exit(falhas ? 1 : 0);

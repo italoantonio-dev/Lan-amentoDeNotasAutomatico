@@ -65,6 +65,7 @@ try {
         const r = await processarAnexo({ nome: a.nome, buffer, emailId: email ? email.ID : 0, simulacao: false, config, empresas, tipos });
         cont.anexos++;
         if (r.decisao === 'LANCADO') cont.lancados++;
+        else if (r.decisao === 'PRONTO') cont.prontos = (cont.prontos || 0) + 1;
         else if (r.decisao === 'APROVACAO') cont.aprovacao++;
         else if (r.decisao === 'REVISAO') cont.revisao++;
         else if (r.decisao === 'ERRO') cont.erros++;

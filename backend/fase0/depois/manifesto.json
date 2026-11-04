@@ -1,0 +1,181 @@
+{
+  "projectId": 65898,
+  "geradoEm": "2026-11-04T20:16:13.467Z",
+  "funcoes": [
+    {
+      "id": 155,
+      "nome": "conferirCadastroErp",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "155-conferirCadastroErp.js",
+      "descricao": "Confere no ERP, requisito a requisito, se o cadastro do parceiro permite o lancamento. Parametro: lancamentoId (numero)."
+    },
+    {
+      "id": 156,
+      "nome": "corrigirCadastroErp",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "156-corrigirCadastroErp.js",
+      "descricao": "Corrige o cadastro do parceiro no ERP (marcar fornecedor, criar parceiro). Desligada na Fase 0: recusa sempre com GRAVACAO_BLOQUEADA, sem alterar o Sankhya."
+    },
+    {
+      "id": 147,
+      "nome": "criarLancamentoViaChat",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "147-criarLancamentoViaChat.js",
+      "descricao": "Cria o lancamento a partir de um documento. Parametros: empresaId (numero), tipoId (numero), cnpj, nome, numeroDoc, serie, dataEmissao (AAAA-MM-DD), dataVencimento (AAAA-MM-DD), valorTotal (numero); opcionais anexoId, hash, arquivoNome, itens. Recusa documento ja lancado."
+    },
+    {
+      "id": 139,
+      "nome": "enviarLancamentoParaErp",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "139-enviarLancamentoParaErp.js",
+      "descricao": "Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar. Gravacao no ERP desligada (Fase 0): sem simular a funcao recusa com GRAVACAO_BLOQUEADA. Nota de entrada nunca e criada aqui. Parametros: lancamentoId (numero); simular (S); opcional codparc."
+    },
+    {
+      "id": 115,
+      "nome": "erpVerificarConexao",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "115-erpVerificarConexao.js",
+      "descricao": "Confere com uma consulta real se a conexao com o ERP responde."
+    },
+    {
+      "id": 146,
+      "nome": "resolverClassificacaoLancamento",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "146-resolverClassificacaoLancamento.js",
+      "descricao": "Resolve TOP, natureza, centro e conta para empresa, tipo e fornecedor. Parametros: empresaId, tipoId, cnpj."
+    },
+    {
+      "id": 159,
+      "nome": "roboKpis",
+      "tipo": "SQL",
+      "arquivo": "159-roboKpis.sql",
+      "descricao": "Indicadores da Caixa de entrada"
+    },
+    {
+      "id": 173,
+      "nome": "roboProcessarAnexo",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "173-roboProcessarAnexo.js",
+      "descricao": "Entrega um documento ao robo pela tela (modo simulacao): mesmo motor, mesma decisao e mesma trilha, sem gravar no ERP. Parametros: nome, conteudoB64."
+    },
+    {
+      "id": 172,
+      "nome": "roboTestarCaixa",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "172-roboTestarCaixa.js",
+      "descricao": "Pergunta o perfil a API do e-mail e devolve o endereco e o total de mensagens. E esse o teste que vale para conector proprio."
+    },
+    {
+      "id": 174,
+      "nome": "roboVarrerEmails",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "174-roboVarrerEmails.js",
+      "descricao": "Busca as notas na caixa de e-mail e processa os anexos: le, classifica e confere sem gravar. Nunca grava no ERP nem confirma nota. So rode a pedido do usuario."
+    },
+    {
+      "id": 100,
+      "nome": "sankhyaCentros",
+      "tipo": "INTEGRATION",
+      "arquivo": "100-sankhyaCentros.json",
+      "descricao": "Centros de resultado no ERP"
+    },
+    {
+      "id": 117,
+      "nome": "sankhyaCidades",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "117-sankhyaCidades.js",
+      "descricao": "Busca cidades no ERP, para o cadastro de parceiro."
+    },
+    {
+      "id": 101,
+      "nome": "sankhyaContas",
+      "tipo": "INTEGRATION",
+      "arquivo": "101-sankhyaContas.json",
+      "descricao": "Contas bancarias no ERP"
+    },
+    {
+      "id": 97,
+      "nome": "sankhyaEmpresas",
+      "tipo": "INTEGRATION",
+      "arquivo": "97-sankhyaEmpresas.json",
+      "descricao": "Empresas no ERP"
+    },
+    {
+      "id": 99,
+      "nome": "sankhyaNaturezas",
+      "tipo": "INTEGRATION",
+      "arquivo": "99-sankhyaNaturezas.json",
+      "descricao": "Naturezas no ERP"
+    },
+    {
+      "id": 145,
+      "nome": "sankhyaPadraoFornecedor",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "145-sankhyaPadraoFornecedor.js",
+      "descricao": "Historico de classificacao de um fornecedor no ERP. Parametros: codemp (numero), codparc (numero)."
+    },
+    {
+      "id": 140,
+      "nome": "sankhyaPadroesLancamento",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "140-sankhyaPadroesLancamento.js",
+      "descricao": "Ranking do que a empresa praticou no ERP nos ultimos 24 meses: TOPs, naturezas, centros, contas e tipos de titulo. Parametro: codemp (numero)."
+    },
+    {
+      "id": 130,
+      "nome": "sankhyaParceiroPorCnpj",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "130-sankhyaParceiroPorCnpj.js",
+      "descricao": "Parceiros ativos com o CNPJ exato. Parametro: cnpj (so digitos)."
+    },
+    {
+      "id": 131,
+      "nome": "sankhyaParceiroPorCodigo",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "131-sankhyaParceiroPorCodigo.js",
+      "descricao": "Le um parceiro pelo codigo. Parametro: codparc (numero)."
+    },
+    {
+      "id": 129,
+      "nome": "sankhyaParceiros",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "129-sankhyaParceiros.js",
+      "descricao": "Busca parceiros no ERP por nome, razao social ou CNPJ. Parametro: busca (texto). Devolve no maximo 20."
+    },
+    {
+      "id": 116,
+      "nome": "sankhyaProdutos",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "116-sankhyaProdutos.js",
+      "descricao": "Busca produtos no ERP por nome ou codigo."
+    },
+    {
+      "id": 102,
+      "nome": "sankhyaTiposTitulo",
+      "tipo": "INTEGRATION",
+      "arquivo": "102-sankhyaTiposTitulo.json",
+      "descricao": "Tipos de titulo no ERP"
+    },
+    {
+      "id": 98,
+      "nome": "sankhyaTops",
+      "tipo": "INTEGRATION",
+      "arquivo": "98-sankhyaTops.json",
+      "descricao": "TOPs vigentes no ERP"
+    },
+    {
+      "id": 103,
+      "nome": "sankhyaUsuarios",
+      "tipo": "INTEGRATION",
+      "arquivo": "103-sankhyaUsuarios.json",
+      "descricao": "Usuarios do ERP, candidatos a aprovador"
+    },
+    {
+      "id": 114,
+      "nome": "sincronizarCadastrosSankhya",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "114-sincronizarCadastrosSankhya.js",
+      "descricao": "Traz empresas, TOPs, naturezas, centros, contas e tipos de titulo do ERP, por upsert no codigo. Somente administrador."
+    }
+  ]
+}

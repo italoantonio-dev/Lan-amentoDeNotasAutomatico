@@ -12,7 +12,7 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     titulo: 'Situações de um lançamento',
     corpo: [
       'Aguardando aprovação: precisa da decisão de uma pessoa.',
-      'Aprovado: pode ir ao ERP, mas o envio é uma ação explícita no detalhe do lançamento.',
+      'Aprovado: pronto para conferência no detalhe do lançamento. A gravação no ERP está desligada nesta fase.',
       'Lançado: gravado no ERP; a chave devolvida fica no histórico de envios.',
       'Rejeitado: não segue; a rejeição sempre tem motivo.',
       'Erro: o ERP recusou; o detalhe explica a causa e o que fazer.',
@@ -36,12 +36,12 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     ],
   },
   {
-    titulo: 'Envio ao ERP',
+    titulo: 'Conferência para o ERP',
     corpo: [
-      'Antes de gravar, o sistema confere: se já foi enviado, se está aprovado, se a classificação está completa, se a TOP combina com o tipo de documento, qual é o parceiro, se o documento já existe no ERP e, para nota, se os itens têm produto.',
+      'O sistema confere: se já foi enviado, se está aprovado, se a classificação está completa, se a TOP combina com o tipo de documento, qual é o parceiro e se o documento já existe no ERP.',
       'Quando há mais de um parceiro com o mesmo CNPJ, o sistema para e pergunta. A escolha fica guardada para os próximos documentos daquele CNPJ.',
-      'Se a nota entra com itens faltando, o envio fica como parcial e não pode ser repetido: a correção é dentro do Sankhya.',
-      'Gravar no ERP é irreversível por aqui.',
+      'Nota de entrada não é criada por este sistema: ela nasce do pedido de compra no Sankhya e é confirmada por uma pessoa autorizada.',
+      'A gravação no ERP está desligada nesta fase: a tela só confere e mostra o que seria enviado.',
     ],
   },
   {
@@ -49,7 +49,8 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     corpo: [
       'A caixa só é lida quando alguém clica em Buscar agora ou pede ao Assistente.',
       'Cada leitura recebe uma nota de confiança, com a justificativa critério a critério: chave de acesso (40), valor rotulado (25), vencimento (15), emissão (10) e destinatário (10).',
-      'Acima do corte e dentro da alçada, o robô lança sozinho. Acima do corte e fora da alçada, vai para aprovação. Abaixo do corte, vai para revisão de leitura.',
+      'Acima do corte e dentro da alçada, o robô confere sem gravar e deixa pronto. Nota de entrada não é criada aqui: segue pelo pedido de compra no Sankhya. Acima do corte e fora da alçada, vai para aprovação. Abaixo do corte, vai para revisão de leitura.',
+      'O robô nunca grava no ERP e nunca confirma nota: a confirmação é manual, por pessoa autorizada no Sankhya.',
       'O corte padrão é 90 e o administrador muda em Caixa de entrada → Ajustes.',
       'Entregar documento testa o robô com um arquivo seu: mesmo motor e mesma decisão, sem gravar no ERP.',
     ],
@@ -57,7 +58,7 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
   {
     titulo: 'Assistente e Playground',
     corpo: [
-      'O Assistente responde e age pelas mesmas funções das telas, e cada ação vira um chip na conversa. Enviar ao ERP continua sendo feito no detalhe do lançamento.',
+      'O Assistente responde e age pelas mesmas funções das telas, e cada ação vira um chip na conversa. A conferência para o ERP é feita no detalhe do lançamento, sem gravar.',
       'No Playground, você faz uma pergunta que nenhuma tela previu e a analista investiga a base e desenha a resposta ao lado da conversa. O estudo fica guardado com versões e pode ser compartilhado por link. Quem tem o link vê sem login.',
       'A IA só responde na aplicação publicada e depois de conectada em Configurações da plataforma, aba AI.',
     ],

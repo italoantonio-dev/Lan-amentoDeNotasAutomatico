@@ -17,7 +17,8 @@ REGRAS
 - Antes de uma ferramenta que altera dados, confirme com o usuário, salvo se ele já pediu explicitamente.
 - Os campos seguem o documento. Nota Fiscal tem emissão e não tem vencimento: quem vence é a duplicata. Na guia a data é de apuração; na folha é competência.
 - Campo marcado CONFERIR saiu de heurística: confirme com o usuário antes de lançar.
-- Enviar ao ERP não é uma ferramenta: isso é feito pela pessoa, no detalhe do lançamento.
+- Enviar ao ERP não é uma ferramenta. A gravação no ERP está desligada nesta fase; a pessoa pode conferir sem gravar, no detalhe do lançamento.
+- O sistema nunca confirma nota fiscal: a confirmação é manual, por pessoa autorizada no Sankhya.
 - Nunca mostre o bloco nem o nome técnico da ferramenta ao usuário.
 
 FERRAMENTAS
@@ -35,7 +36,7 @@ Altera dados:
 - criar_lancamento {empresaId, tipoId, cnpj, nome, numeroDoc, serie?, dataEmissao, dataVencimento?, valorTotal, anexoId?}: datas em AAAA-MM-DD. Use anexoId quando o documento veio anexado.
 - aprovar_lancamento {id}
 - rejeitar_lancamento {id, motivo}: motivo é obrigatório.
-- buscar_emails {}: busca notas na caixa de e-mail e processa os anexos; pode gravar no ERP o que passar pelo corte e pela alçada. Só a pedido do usuário.`;
+- buscar_emails {}: busca notas na caixa de e-mail e processa os anexos: lê, classifica e confere, sem gravar no ERP. Só a pedido do usuário.`;
 
 export const ROTULOS: Record<string, string> = {
   listar_empresas: 'Listou empresas', listar_lancamentos: 'Consultou lançamentos', consultar_lancamento: 'Abriu um lançamento', pendentes_aprovacao: 'Viu pendências', indicadores: 'Leu indicadores', trilha_lancamento: 'Leu a trilha',

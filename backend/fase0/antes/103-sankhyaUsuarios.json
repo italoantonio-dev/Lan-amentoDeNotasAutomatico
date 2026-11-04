@@ -1,0 +1,1 @@
+{"connection":"sankhya","method":"POST","endpoint":"/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json","body":{"serviceName":"DbExplorerSP.executeQuery","requestBody":{"sql":"SELECT CODUSU, NOMEUSU, EMAIL, VLRMAXAUT, CODGRUPO FROM TSIUSU ORDER BY NOMEUSU"}}}

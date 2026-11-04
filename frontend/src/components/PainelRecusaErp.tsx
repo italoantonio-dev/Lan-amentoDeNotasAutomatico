@@ -7,6 +7,7 @@ import { execSF, SF } from '../lib/api';
 import { buscarCidades } from '../lib/cidadesErp';
 import { diagnosticar } from '../lib/diagnosticoErp';
 import { getMitraErrorMessage } from '../lib/utils';
+import { GRAVACAO_ERP_LIBERADA } from '../hooks/useEnvioErp';
 
 interface Requisito { rotulo: string; pronto: boolean; detalhe: string }
 interface Conferencia { ok: boolean; erro?: string; requisitos?: Requisito[]; codparc?: number | null }
@@ -81,7 +82,7 @@ export default function PainelRecusaErp({ lancamentoId, mensagem, semParceiro, n
         </ul>
       )}
 
-      {semParceiro && administrador && (
+      {GRAVACAO_ERP_LIBERADA && semParceiro && administrador && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
           <Input label="Nome do parceiro" value={nome} onChange={(e) => setNome(e.target.value)} />
           <Input label="Buscar cidade" value={termoCidade} onChange={(e) => setTermoCidade(e.target.value)} placeholder="Digite o nome da cidade" />
@@ -92,9 +93,10 @@ export default function PainelRecusaErp({ lancamentoId, mensagem, semParceiro, n
 
       <div className="flex flex-wrap gap-2">
         {administrador && d.corrigir && !conf?.requisitos && <Button variant="secondary" disabled={ocupado} onClick={conferir}><Wrench size={16} /> Conferir cadastro</Button>}
-        {administrador && d.corrigir && conf?.codparc && conf.requisitos?.some((r) => !r.pronto) && <Button variant="secondary" disabled={ocupado} onClick={() => corrigir(d.corrigir as string, { codparc: conf.codparc })}><Wrench size={16} /> Corrigir cadastro</Button>}
-        {!administrador && d.corrigir && <span className="text-[12.5px] text-fg-muted self-center">Só o administrador corrige o cadastro no ERP.</span>}
-        {d.tentarDeNovo && <Button disabled={enviando} onClick={onTentar}><RefreshCw size={16} /> Tentar novamente</Button>}
+        {GRAVACAO_ERP_LIBERADA && administrador && d.corrigir && conf?.codparc && conf.requisitos?.some((r) => !r.pronto) && <Button variant="secondary" disabled={ocupado} onClick={() => corrigir(d.corrigir as string, { codparc: conf.codparc })}><Wrench size={16} /> Corrigir cadastro</Button>}
+        {GRAVACAO_ERP_LIBERADA && !administrador && d.corrigir && <span className="text-[12.5px] text-fg-muted self-center">Só o administrador corrige o cadastro no ERP.</span>}
+        {!GRAVACAO_ERP_LIBERADA && (semParceiro || d.corrigir) && <span className="text-[12.5px] text-fg-muted self-center">O ajuste do cadastro é feito diretamente no Sankhya.</span>}
+        {d.tentarDeNovo && <Button disabled={enviando} onClick={onTentar}><RefreshCw size={16} /> {GRAVACAO_ERP_LIBERADA ? 'Tentar novamente' : 'Conferir novamente'}</Button>}
       </div>
     </div>
   );

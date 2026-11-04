@@ -1,0 +1,1 @@
+{"connection":"sankhya","method":"POST","endpoint":"/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json","body":{"serviceName":"DbExplorerSP.executeQuery","requestBody":{"sql":"SELECT CODCENCUS, DESCRCENCUS, ATIVO FROM TSICUS ORDER BY CODCENCUS"}}}

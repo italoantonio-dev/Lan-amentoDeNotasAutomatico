@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, ExternalLink, Pencil, Send, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, ExternalLink, Pencil, Send, Trash2, X, SearchCheck } from 'lucide-react';
 import { callSF, exigirAfetou, execSF, SF, umaLinha } from '../lib/api';
 import { formatarCnpj, formatarData, formatarDataHora, formatarMoeda, ORIGEM_CLASSIFICACAO, rotulosDoTipo } from '../lib/formato';
 import { usePermissoes } from '../lib/permissoes';
 import { getMitraErrorMessage } from '../lib/utils';
-import { useEnvioErp } from '../hooks/useEnvioErp';
+import { GRAVACAO_ERP_LIBERADA, useEnvioErp } from '../hooks/useEnvioErp';
 import { useToast } from '../hooks/useToast';
 import { Card } from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
@@ -105,6 +105,11 @@ export default function LancamentoDetalhePage() {
 
   async function enviarAgora(codparc?: number) {
     setConfirmaEnvio(false);
+    if (!GRAVACAO_ERP_LIBERADA) {
+      const c = await envio.conferir(codparc);
+      if (c.ok) addToast('success', c.jaEnviado ? c.mensagem ?? 'Já enviado.' : 'Conferência concluída. Nada foi gravado no ERP.');
+      return;
+    }
     const r = await envio.enviar(codparc);
     if (r.ok) addToast('success', r.jaEnviado ? r.mensagem ?? 'Já enviado.' : `Gravado no ERP: chave ${r.chave}.`);
   }
@@ -221,16 +226,31 @@ export default function LancamentoDetalhePage() {
           )}
 
           <Card>
-            <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">Enviar ao ERP</h2></div>
+            <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">{GRAVACAO_ERP_LIBERADA ? 'Enviar ao ERP' : 'Conferir para o ERP'}</h2></div>
             <div className="px-5 py-5 flex flex-col gap-3">
+              {!GRAVACAO_ERP_LIBERADA && !enviado && !parcial && <p className="text-[13px] text-fg-muted">A gravação no ERP está desligada nesta fase. A conferência só lê o Sankhya e mostra o que seria enviado.</p>}
               {enviado && <p className="text-[13.5px] text-fg">Gravado no ERP. Chave <strong className="font-semibold tabular-nums">{envios.find((e) => e.STATUS === 'OK')?.CHAVE_ERP}</strong>.</p>}
               {parcial && <Aviso tipo="danger">A nota entrou no ERP com itens faltando. Reenviar criaria uma segunda nota: a correção é dentro do Sankhya.</Aviso>}
-              {!enviado && !parcial && !podeEnviar && <p className="text-[13px] text-fg-muted">{status === 'AGUARDANDO_APROVACAO' ? 'O envio fica disponível depois da aprovação.' : status === 'REVISAO_LEITURA' ? 'O envio fica disponível depois da conferência da leitura.' : 'Lançamento rejeitado não vai ao ERP.'}</p>}
-              {podeEnviar && !mensagemRecusa && !envio.candidatos && (
+              {!enviado && !parcial && !podeEnviar && <p className="text-[13px] text-fg-muted">{status === 'AGUARDANDO_APROVACAO' ? `${GRAVACAO_ERP_LIBERADA ? 'O envio' : 'A conferência'} fica disponível depois da aprovação.` : status === 'REVISAO_LEITURA' ? `${GRAVACAO_ERP_LIBERADA ? 'O envio' : 'A conferência'} fica disponível depois da conferência da leitura.` : 'Lançamento rejeitado não vai ao ERP.'}</p>}
+              {GRAVACAO_ERP_LIBERADA && podeEnviar && !mensagemRecusa && !envio.candidatos && (
                 <>
                   <p className="text-[13px] text-fg-muted">Gravar no ERP é irreversível. Confira os dados antes de enviar.</p>
                   <Button disabled={envio.enviando} onClick={() => setConfirmaEnvio(true)}><Send size={16} /> {envio.enviando ? 'Enviando...' : 'Enviar ao ERP'}</Button>
                 </>
+              )}
+              {!GRAVACAO_ERP_LIBERADA && podeEnviar && !mensagemRecusa && !envio.candidatos && (
+                <Button variant="secondary" disabled={envio.enviando} onClick={() => enviarAgora()}><SearchCheck size={16} /> {envio.enviando ? 'Conferindo...' : 'Conferir sem gravar'}</Button>
+              )}
+              {envio.conferencia && (
+                <div className="rounded-xl border border-border-subtle p-4 flex flex-col gap-1.5">
+                  <p className="text-[13.5px] font-medium text-fg">Conferência sem gravar: passou por todas as guardas.</p>
+                  <p className="text-[13px] text-fg-muted">Parceiro {envio.conferencia.parceiro?.codparc} · {envio.conferencia.parceiro?.nome ?? 'sem nome'}</p>
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12.5px] mt-1">
+                    {Object.entries(envio.conferencia.campos ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => (
+                      <div key={k} className="flex justify-between gap-2 min-w-0"><dt className="text-fg-muted">{k}</dt><dd className="text-fg tabular-nums truncate">{String(v)}</dd></div>
+                    ))}
+                  </dl>
+                </div>
               )}
               {envio.candidatos && (
                 <div className="flex flex-col gap-2">
@@ -241,10 +261,11 @@ export default function LancamentoDetalhePage() {
                       <span className="block text-[12px] text-fg-muted">{c.fornecedor ? 'Fornecedor no ERP' : 'Não marcado como fornecedor'}</span>
                     </button>
                   ))}
-                  <Button disabled={!escolha || envio.enviando} onClick={() => enviarAgora(Number(escolha))}><Send size={16} /> Enviar para este parceiro</Button>
+                  <Button disabled={!escolha || envio.enviando} onClick={() => enviarAgora(Number(escolha))}><Send size={16} /> {GRAVACAO_ERP_LIBERADA ? 'Enviar para este parceiro' : 'Conferir com este parceiro'}</Button>
                 </div>
               )}
-              {!enviado && !parcial && mensagemRecusa && !envio.candidatos && (
+              {envio.recusa?.motivo === 'NOTA_PROIBIDA' && !envio.candidatos && <Aviso tipo="info">{envio.recusa.mensagem}</Aviso>}
+              {!enviado && !parcial && mensagemRecusa && envio.recusa?.motivo !== 'NOTA_PROIBIDA' && !envio.candidatos && (
                 <PainelRecusaErp lancamentoId={id} mensagem={mensagemRecusa} semParceiro={envio.recusa?.semParceiro} nomeFornecedor={String(l.NOME_FORNECEDOR ?? '')} administrador={perm.administrador} enviando={envio.enviando} onTentar={() => enviarAgora()} onAviso={addToast} />
               )}
               {envios.length > 0 && (

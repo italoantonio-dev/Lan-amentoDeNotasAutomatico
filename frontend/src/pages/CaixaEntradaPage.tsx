@@ -21,12 +21,14 @@ const POR_PAGINA = 30;
 
 const DESFECHOS: Record<string, { rotulo: string; variante: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }> = {
   LANCADO: { rotulo: 'Lançado', variante: 'success' },
-  SIMULADO: { rotulo: 'Lançaria (simulação)', variante: 'info' },
+  PRONTO: { rotulo: 'Pronto para conferência', variante: 'success' },
+  NOTA_PEDIDO: { rotulo: 'Nota: segue pelo pedido', variante: 'info' },
+  SIMULADO: { rotulo: 'Pronto (simulação)', variante: 'info' },
   APROVACAO: { rotulo: 'Para aprovação', variante: 'warning' },
   REVISAO: { rotulo: 'Revisão de leitura', variante: 'neutral' },
   SEM_EMPRESA: { rotulo: 'Sem empresa', variante: 'danger' },
   DUPLICADO: { rotulo: 'Duplicado', variante: 'neutral' },
-  ERRO: { rotulo: 'Parou no envio', variante: 'danger' },
+  ERRO: { rotulo: 'Parou na conferência', variante: 'danger' },
 };
 
 function Indicador({ rotulo, valor, detalhe, icone, cor }: { rotulo: string; valor: string; detalhe?: string; icone: React.ReactNode; cor: string }) {
@@ -141,7 +143,7 @@ export default function CaixaEntradaPage() {
     <div className="p-4 md:p-8">
       <CabecalhoPagina
         titulo="Caixa de entrada"
-        descricao={`O robô lê as notas do e-mail. Acima de ${corte}% de confiança e dentro da alçada, ele lança sozinho. A caixa só é lida quando você pede.`}
+        descricao={`O robô lê e classifica as notas do e-mail. Acima de ${corte}% de confiança e dentro da alçada, deixa pronto para conferência. Ele não grava no ERP e nunca confirma nota. A caixa só é lida quando você pede.`}
         acoes={
           <>
             <Button variant="secondary" disabled={testando} onClick={testarConexao}><Plug size={16} /> {testando ? 'Testando...' : 'Testar conexão'}</Button>
@@ -167,7 +169,7 @@ export default function CaixaEntradaPage() {
         <>
           <div className="cascata grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5 mb-5">
             <Indicador rotulo="Lidos" valor={String(kpis?.LIDOS ?? 0)} detalhe={kpis?.ULTIMA_BUSCA ? `Última busca: ${formatarDataHora(kpis.ULTIMA_BUSCA)}` : 'Nenhuma busca ainda'} icone={<Inbox size={16} />} cor="var(--fg-muted)" />
-            <Indicador rotulo="Lançados sozinhos" valor={String(kpis?.LANCADOS ?? 0)} icone={<Check size={16} />} cor="var(--success)" />
+            <Indicador rotulo="Prontos para conferência" valor={String(kpis?.PRONTOS ?? 0)} icone={<Check size={16} />} cor="var(--success)" />
             <Indicador rotulo="Para aprovação" valor={String(kpis?.APROVACAO ?? 0)} icone={<ShieldCheck size={16} />} cor="var(--warning)" />
             <Indicador rotulo="Revisão de leitura" valor={String(kpis?.REVISAO ?? 0)} icone={<TriangleAlert size={16} />} cor="var(--danger)" />
             <Indicador rotulo="Confiança média" valor={`${kpis?.CONFIANCA_MEDIA ?? 0}%`} detalhe={`Corte em vigor: ${corte}%`} icone={<Gauge size={16} />} cor="var(--info)" />
@@ -205,7 +207,7 @@ export default function CaixaEntradaPage() {
       )}
 
       <ConfirmDialog isOpen={confirmaBusca} onClose={() => setConfirmaBusca(false)} onConfirm={buscarAgora} title="Buscar agora" confirmLabel="Buscar e processar" loading={buscando}
-        message={`O robô lê a caixa de e-mail e pode gravar no ERP o que passar pelo corte de ${corte}% e pela alçada.`} />
+        message={`O robô lê a caixa de e-mail, classifica os documentos e confere o que passar pelo corte de ${corte}% e pela alçada. Nada é gravado no ERP.`} />
       {detalheId !== null && <DetalheAnexo id={detalheId} corte={corte} onFechar={() => setDetalheId(null)} onAbrirLancamento={(id) => nav(`/lancamentos/${id}`)} onAviso={addToast} />}
       {ajustes && <AjustesRobo config={config} onFechar={() => setAjustes(false)} onSalvo={() => { setAjustes(false); addToast('success', 'Ajustes salvos. Valem na próxima rodada.'); carregar(); }} />}
       <ToastContainer toasts={toasts} onRemove={removeToast} />

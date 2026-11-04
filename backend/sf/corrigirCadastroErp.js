@@ -1,3 +1,8 @@
+// FASE 0: corrigir cadastro grava no ERP. Com a gravacao desligada, recusa antes de tudo,
+// para qualquer usuario e qualquer acao. Ajuste de cadastro e feito dentro do Sankhya.
+if (!GRAVACAO_ERP_HABILITADA) {
+  return { ok: false, motivo: 'GRAVACAO_BLOQUEADA', erro: 'Correção de cadastro no ERP desligada nesta fase: nada foi alterado no Sankhya. Ajuste o cadastro diretamente no Sankhya e confira de novo.' };
+}
 const adm = await uma(SF.souAdministrador, {});
 if (!adm || Number(adm.ADMIN) !== 1) return { ok: false, erro: 'Só o administrador corrige cadastro no ERP.' };
 const id = inteiro(event.lancamentoId);

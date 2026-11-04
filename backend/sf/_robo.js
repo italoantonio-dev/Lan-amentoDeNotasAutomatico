@@ -12,8 +12,10 @@ async function subirPrivado(nome, buffer) {
   return (up && up.result && up.result.key) || '';
 }
 
-// O robo repete a sequencia da tela e do chat e termina no mesmo envio ao ERP: nenhuma
-// regra e reescrita nem afrouxada aqui.
+// O robo repete a sequencia da tela e do chat e termina na mesma conferencia do envio:
+// nenhuma regra e reescrita nem afrouxada aqui. Desde a Fase 0 o robo SEMPRE confere sem
+// gravar (simular), em qualquer modo e com qualquer configuracao: ele nunca grava no ERP
+// e nunca confirma nota. Quem leva ao ERP e uma pessoa.
 async function processarAnexo(ctx) {
   const { nome, buffer, emailId, simulacao, config, empresas, tipos } = ctx;
   const corte = Number(config.CORTE_CONFIANCA ?? 90);
@@ -62,11 +64,14 @@ async function processarAnexo(ctx) {
   if (abaixo) return fechar('REVISAO', 'Confiança ' + nota.confianca + ' < corte ' + corte + ': precisa de conferência humana.', base);
   if (criado.status !== 'APROVADO') return fechar('APROVACAO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas o valor está acima da alçada: foi para a fila de aprovação.', base);
 
-  const envio = await chamar(SF.enviarLancamentoParaErp, { lancamentoId: criado.lancamentoId, simular: simulacao ? 'S' : '' });
+  // Sempre 'S': a conferencia le o ERP e devolve o que seria enviado, sem reservar nem gravar.
+  const envio = await chamar(SF.enviarLancamentoParaErp, { lancamentoId: criado.lancamentoId, simular: 'S' });
+  // Nota de entrada nao e erro do robo: ela nasce do pedido de compra, dentro do Sankhya.
+  if (envio && envio.motivo === 'NOTA_PROIBIDA') return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada. Este sistema não cria a nota; ela segue pelo pedido de compra no Sankhya, com confirmação por uma pessoa.', base);
   if (simulacao) {
-    if (envio && envio.ok) return fechar('SIMULADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: o robô lançaria no ERP. Na simulação nada é gravado; abra o lançamento para enviar.', base);
-    return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas o envio pararia: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);
+    if (envio && envio.ok) return fechar('SIMULADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: estaria pronto para conferência. Na simulação nada é gravado.', base);
+    return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas a conferência parou: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);
   }
-  if (envio && envio.ok) return fechar('LANCADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: lançado pelo robô (chave ' + envio.chave + ').', Object.assign(base, { chaveErp: String(envio.chave || '') }));
-  return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas o envio parou: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);
+  if (envio && envio.ok) return fechar('PRONTO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: conferido sem gravar e pronto para uma pessoa levar ao ERP. O robô não grava no ERP.', base);
+  return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas a conferência parou: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);
 }
