@@ -6,3 +6,6 @@ dist/
 *.log
 .e2b/
 backend/migrations/SKILL.md
+
+# Cache da auditoria: dado real do ERP, fora do git
+backend/auditoria/.cache/

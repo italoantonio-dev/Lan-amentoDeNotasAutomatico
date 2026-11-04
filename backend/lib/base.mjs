@@ -1,10 +1,13 @@
 // Apoio comum a todos os scripts de backend. Tudo aqui e idempotente: reexecutar
 // um script nao apaga dado nem duplica SF.
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as sdk from 'mitra-sdk';
+
+// .env pelo caminho deste arquivo: rodar um script de outra pasta nao pode ficar sem credencial.
+dotenv.config({ path: new URL('../.env', import.meta.url).pathname, quiet: true });
 
 export { sdk };
 
