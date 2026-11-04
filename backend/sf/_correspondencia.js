@@ -29,17 +29,14 @@ async function dadosDaCorrespondencia(documento) {
   if (!parceiros.length) return vazio;
   const codparcs = sqlInteiros(parceiros.map((p) => p.CODPARC));
   const codigos = sqlTextos(documento.itens.map((i) => i.cProd));
-  const gtins = sqlTextos(documento.itens.map((i) => i.cEAN).filter((g) => /^\d{8,14}$/.test(String(g || ''))));
-
   const dePara = codigos ? await erpConsulta('SELECT CODPARC, CODPROPARC, CODPROD FROM TGFPAP WHERE CODPARC IN (' + codparcs + ') AND UPPER(TRIM(CODPROPARC)) IN (' + codigos + ')') : [];
-  const condRef = [];
-  if (codigos) condRef.push('UPPER(TRIM(REFFORN)) IN (' + codigos + ')');
-  const refsAlvo = [codigos, gtins].filter(Boolean).join(',');
-  if (refsAlvo) condRef.push('UPPER(TRIM(REFERENCIA)) IN (' + refsAlvo + ')');
-  const referencias = condRef.length ? await erpConsulta('SELECT CODPROD, REFFORN, REFERENCIA FROM TGFPRO WHERE ' + condRef.join(' OR ')) : [];
+  const referencias = codigos ? await erpConsulta('SELECT CODPROD, REFFORN FROM TGFPRO WHERE UPPER(TRIM(REFFORN)) IN (' + codigos + ')') : [];
 
   const codparcsNum = parceiros.map((p) => Number(p.CODPARC));
-  const codprods = sqlInteiros(documento.itens.flatMap((i) => correspondencia.identificarProduto(i, codparcsNum, dePara, referencias).codprods));
+  const codprods = sqlInteiros(documento.itens.flatMap((i) => {
+    const id = correspondencia.identificarProduto(i, codparcsNum, dePara, referencias);
+    return [...id.codprods, ...id.sugestoes];
+  }));
   let pedidos = [];
   if (codprods) {
     const linhas = await erpConsulta(

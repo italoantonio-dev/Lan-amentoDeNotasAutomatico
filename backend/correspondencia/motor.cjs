@@ -19,27 +19,18 @@ const codigo = (v) => String(v == null ? '' : v).trim().toUpperCase();
 const unicos = (lista) => [...new Set(lista)];
 const arred = (v, casas) => Math.round(num(v) * 10 ** casas) / 10 ** casas;
 
-// Identificacao do produto do ERP a partir do item da NF-e. Fontes, na ordem: codigo ja informado
-// por uma pessoa; de-para do proprio Sankhya (TGFPAP, produto por parceiro); referencia do
-// fornecedor no produto (TGFPRO.REFFORN); referencia do produto (TGFPRO.REFERENCIA); GTIN contra a
-// referencia. A primeira fonte que responde vale, e a fonte fica registrada para a pessoa conferir.
+// Identificacao do produto do ERP a partir do item da NF-e. So identificam o produto informado por
+// uma pessoa e o de-para do proprio Sankhya (TGFPAP): no historico do piloto ele nao errou nenhum
+// item. A referencia do fornecedor (TGFPRO.REFFORN) errou 22% das vezes, entao e so SUGESTAO: aparece
+// para a pessoa conferir e nao entra na decisao. REFERENCIA (62% de erro) e GTIN (100%) nao sao usados.
 function identificarProduto(item, codparcs, dePara, referencias) {
-  if (num(item.codprod) > 0) return { situacao: 'IDENTIFICADO', fonte: 'INFORMADO', codprods: [num(item.codprod)] };
+  if (num(item.codprod) > 0) return { situacao: 'IDENTIFICADO', fonte: 'INFORMADO', codprods: [num(item.codprod)], sugestoes: [] };
   const c = codigo(item.cProd);
-  const gtin = codigo(item.cEAN);
-  // Valor vazio nunca casa: item sem codigo nao pode cair num produto sem referencia.
-  const fontes = [
-    ['TGFPAP', () => (c ? dePara.filter((d) => codparcs.includes(num(d.CODPARC)) && codigo(d.CODPROPARC) === c) : [])],
-    ['REFFORN', () => (c ? referencias.filter((r) => codigo(r.REFFORN) === c) : [])],
-    ['REFERENCIA', () => (c ? referencias.filter((r) => codigo(r.REFERENCIA) === c) : [])],
-    ['GTIN', () => (/^\d{8,14}$/.test(gtin) ? referencias.filter((r) => codigo(r.REFERENCIA) === gtin) : [])],
-  ];
-  if (!c && !gtin) return { situacao: 'NAO_IDENTIFICADO', fonte: '', codprods: [] };
-  for (const [fonte, buscar] of fontes) {
-    const achados = unicos(buscar().map((x) => num(x.CODPROD)).filter((x) => x > 0));
-    if (achados.length) return { situacao: achados.length === 1 ? 'IDENTIFICADO' : 'AMBIGUO', fonte, codprods: achados };
-  }
-  return { situacao: 'NAO_IDENTIFICADO', fonte: '', codprods: [] };
+  if (!c) return { situacao: 'NAO_IDENTIFICADO', fonte: '', codprods: [], sugestoes: [] };
+  const achados = unicos(dePara.filter((d) => codparcs.includes(num(d.CODPARC)) && codigo(d.CODPROPARC) === c).map((x) => num(x.CODPROD)).filter((x) => x > 0));
+  if (achados.length) return { situacao: achados.length === 1 ? 'IDENTIFICADO' : 'AMBIGUO', fonte: 'TGFPAP', codprods: achados, sugestoes: [] };
+  const sugestoes = unicos(referencias.filter((r) => codigo(r.REFFORN) === c).map((x) => num(x.CODPROD)).filter((x) => x > 0));
+  return { situacao: 'NAO_IDENTIFICADO', fonte: '', codprods: [], sugestoes };
 }
 
 // Saldo do item do pedido. Saldo oficial ainda a confirmar (V-05): aqui e QTDNEG - QTDENTREGUE,
@@ -124,6 +115,13 @@ function conferir(entrada) {
         linhas.push(compararLinha(itemDoc, p, it));
       }
     }
+    // Sugestao nao decide: as linhas aparecem so para a pessoa conferir.
+    const linhasSugeridas = [];
+    for (const p of daEmpresa) {
+      for (const it of p.itens || []) {
+        if (ident.sugestoes.includes(num(it.CODPROD)) && saldo(it).pendente > ARRED) linhasSugeridas.push(compararLinha(itemDoc, p, it));
+      }
+    }
     const pedidosDoItem = unicos(linhas.map((l) => l.pedido));
     let situacao;
     if (ident.situacao === 'NAO_IDENTIFICADO') situacao = 'PRODUTO_NAO_IDENTIFICADO';
@@ -135,7 +133,7 @@ function conferir(entrada) {
     resultado.itens.push({
       nItem: itemDoc.nItem ?? null, cProd: itemDoc.cProd || '', cEAN: itemDoc.cEAN || '', xProd: itemDoc.xProd || itemDoc.descricao || '',
       quantidade: num(itemDoc.quantidade), unidade: codigo(itemDoc.unidade), valorUnitario: num(itemDoc.valorUnitario), valorTotal: num(itemDoc.valorTotal),
-      identificacao: ident, situacao, pedidos: pedidosDoItem, linhas,
+      identificacao: ident, situacao, pedidos: pedidosDoItem, linhas, linhasSugeridas,
       saldoSuficienteEm: pedidosDoItem.filter((_, i) => pendenteNoPedido[i] + ARRED >= num(itemDoc.quantidade)),
       pendenteEmOutraEmpresa: emOutraEmpresa,
     });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Bot, CheckSquare, FileText, FlaskConical, HelpCircle, Inbox, LayoutDashboard, Menu, Settings, X } from 'lucide-react';
+import { Bot, CheckSquare, FileText, FlaskConical, HelpCircle, Inbox, LayoutDashboard, Menu, Settings, X, FileSearch } from 'lucide-react';
 import Robo from './Robo';
 import { useContagem } from '../hooks/useContagem';
 import { usePermissoes } from '../lib/permissoes';
@@ -9,6 +9,7 @@ const ENTRADAS = [
   { para: '/', rotulo: 'Painel', icone: LayoutDashboard },
   { para: '/lancamentos', rotulo: 'Lançamentos', icone: FileText },
   { para: '/caixa-entrada', rotulo: 'Caixa de entrada', icone: Inbox },
+  { para: '/conferencia-nfe', rotulo: 'Conferência de NF-e', icone: FileSearch },
   { para: '/aprovacoes', rotulo: 'Aprovações', icone: CheckSquare },
   { para: '/assistente', rotulo: 'Assistente', icone: Bot },
   { para: '/playground', rotulo: 'Playground', icone: FlaskConical },

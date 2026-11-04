@@ -40,7 +40,8 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     corpo: [
       'O sistema confere: se já foi enviado, se está aprovado, se a classificação está completa, se a TOP combina com o tipo de documento, qual é o parceiro e se o documento já existe no ERP.',
       'Quando há mais de um parceiro com o mesmo CNPJ, o sistema para e pergunta. A escolha fica guardada para os próximos documentos daquele CNPJ.',
-      'Nota de entrada não é criada por este sistema: ela nasce do pedido de compra no Sankhya e é confirmada por uma pessoa autorizada.',
+      'Nota fiscal: a conferência compara a NF-e com os pedidos de compra (candidatos, quantidades negociada, entregue e pendente, preços, vínculos, ambiguidade e duplicidade), sem gravar nada. Nenhuma tolerância é aplicada: toda diferença aparece.',
+      'Criar nota no ERP está bloqueado até existir serviço oficial homologado e autorização. O caminho previsto é faturar o pedido de compra e salvar a nota não confirmada. Confirmar é sempre manual, no Sankhya.',
       'A gravação no ERP está desligada nesta fase: a tela só confere e mostra o que seria enviado.',
     ],
   },
@@ -49,7 +50,7 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     corpo: [
       'A caixa só é lida quando alguém clica em Buscar agora ou pede ao Assistente.',
       'Cada leitura recebe uma nota de confiança, com a justificativa critério a critério: chave de acesso (40), valor rotulado (25), vencimento (15), emissão (10) e destinatário (10).',
-      'Acima do corte e dentro da alçada, o robô confere sem gravar e deixa pronto. Nota de entrada não é criada aqui: segue pelo pedido de compra no Sankhya. Acima do corte e fora da alçada, vai para aprovação. Abaixo do corte, vai para revisão de leitura.',
+      'Acima do corte e dentro da alçada, o robô confere sem gravar e deixa pronto. Nota de entrada é conferida com os pedidos de compra, só lendo. Acima do corte e fora da alçada, vai para aprovação. Abaixo do corte, vai para revisão de leitura.',
       'O robô nunca grava no ERP e nunca confirma nota: a confirmação é manual, por pessoa autorizada no Sankhya.',
       'O corte padrão é 90 e o administrador muda em Caixa de entrada → Ajustes.',
       'Entregar documento testa o robô com um arquivo seu: mesmo motor e mesma decisão, sem gravar no ERP.',

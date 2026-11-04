@@ -53,7 +53,7 @@ só é possível construir e operar a parte de **leitura, validação, classific
 | Importação de XML nativa do Sankhya (a coluna `DESCONSIDPEDXML` sugere que existe) | Possível caminho oficial para nota a partir de XML com pedido | ❓ V-11 — precisa ser investigada antes de construir o faturamento por conta própria |
 | Rotina de faturamento de pedido na interface do Sankhya | É o "processo oficial" exigido | Existe como prática (6.389 notas vindas de pedido) · ❓ equivalente por API (V-01) |
 
-### 2.2 Na plataforma (Mitra)
+### 2.2 Na plataforma
 
 | Recurso | Uso | Situação |
 |---|---|---|
@@ -286,7 +286,10 @@ Cada fase só começa com a anterior aprovada. Nenhuma fase grava em produção 
 | V-14 | Campo adicional na nota para o identificador do documento | TI do Sankhya | TI |
 | V-15 | O Sankhya guarda o vínculo entre código do produto do fornecedor e CODPROD? | Dicionário + documentação | TI + Compras |
 | V-16 | É possível abrir uma nota específica no Sankhya por link a partir da central? | Documentação / Sankhya Pass | TI |
-| V-17 | Um usuário business consegue chamar a integração `sankhya` direto do navegador, sem passar pelas funções do sistema? | Teste com usuário business, só com consulta | TI |
+| V-17 | Um usuário business consegue chamar a integração `sankhya` direto do navegador, sem passar pelas funções do sistema? **Para desenvolvedor, sim (comprovado).** Business ainda não testado (`fase0-plano-execucao.md`, seção 7.1) | Sonda `_smoke-v17.mjs` com um usuário business, só com consulta | TI |
+| V-18 | O serviço de consulta do Sankhya recusa comando de escrita? | Homologação. Nunca em produção | TI |
+| V-19 | Equivalência de unidades entre NF-e e pedido: `TGFVOA` e `TGFPAP.UNIDADEPARC` podem ser a fonte oficial? | Documentação + amostra | TI + Compras |
+| V-20 | Em que momento a `TGFPAP` é alimentada: antes da chegada da nota ou na importação do XML? | Consulta à TI + operação assistida | TI + Compras |
 
 ---
 

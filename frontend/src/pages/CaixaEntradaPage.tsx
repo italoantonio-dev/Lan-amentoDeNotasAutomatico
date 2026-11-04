@@ -22,7 +22,7 @@ const POR_PAGINA = 30;
 const DESFECHOS: Record<string, { rotulo: string; variante: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }> = {
   LANCADO: { rotulo: 'Lançado', variante: 'success' },
   PRONTO: { rotulo: 'Pronto para conferência', variante: 'success' },
-  NOTA_PEDIDO: { rotulo: 'Nota: segue pelo pedido', variante: 'info' },
+  NOTA_PEDIDO: { rotulo: 'Nota conferida com pedidos', variante: 'info' },
   SIMULADO: { rotulo: 'Pronto (simulação)', variante: 'info' },
   APROVACAO: { rotulo: 'Para aprovação', variante: 'warning' },
   REVISAO: { rotulo: 'Revisão de leitura', variante: 'neutral' },

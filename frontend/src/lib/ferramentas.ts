@@ -31,6 +31,7 @@ Leitura:
 - trilha_lancamento {id}: o porquê de cada passo.
 - listar_anexos {}: documentos desta conversa e a situação de cada um.
 - buscar_parceiro {busca}: fornecedores no ERP por nome ou CNPJ.
+- conferir_nota {lancamentoId}: confere a nota fiscal do lançamento com os pedidos de compra (somente leitura). Em situação AMBIGUO, apresente os candidatos e diga que uma pessoa escolhe; nunca escolha por ela. Não aplique tolerância: diferença é diferença.
 - listar_tipos {}: tipos de documento com id.
 Altera dados:
 - criar_lancamento {empresaId, tipoId, cnpj, nome, numeroDoc, serie?, dataEmissao, dataVencimento?, valorTotal, anexoId?}: datas em AAAA-MM-DD. Use anexoId quando o documento veio anexado.
@@ -40,7 +41,7 @@ Altera dados:
 
 export const ROTULOS: Record<string, string> = {
   listar_empresas: 'Listou empresas', listar_lancamentos: 'Consultou lançamentos', consultar_lancamento: 'Abriu um lançamento', pendentes_aprovacao: 'Viu pendências', indicadores: 'Leu indicadores', trilha_lancamento: 'Leu a trilha',
-  listar_anexos: 'Viu os anexos', buscar_parceiro: 'Buscou fornecedor', listar_tipos: 'Listou tipos', criar_lancamento: 'Criou lançamento', aprovar_lancamento: 'Aprovou', rejeitar_lancamento: 'Rejeitou', buscar_emails: 'Buscou e-mails',
+  listar_anexos: 'Viu os anexos', buscar_parceiro: 'Buscou fornecedor', conferir_nota: 'Conferiu nota com pedidos', listar_tipos: 'Listou tipos', criar_lancamento: 'Criou lançamento', aprovar_lancamento: 'Aprovou', rejeitar_lancamento: 'Rejeitou', buscar_emails: 'Buscou e-mails',
 };
 
 // Modelos as vezes envolvem o bloco em cercas de codigo: aceita as duas formas.
@@ -103,6 +104,11 @@ export async function executarFerramenta(b: Bloco, conversaId: number): Promise<
     case 'listar_anexos': {
       const r = await callSF(SF.chatListarAnexos, { conversaId });
       return { dados: reduzir(r, ['ID', 'NOME', 'STATUS', 'LANCAMENTO_ID', 'CAMPOS_JSON']), sucesso: true, resumo: `${r.length} anexos` };
+    }
+    case 'conferir_nota': {
+      const r = await execSF<{ ok: boolean; erro?: string; origem?: string; resultado?: Record<string, unknown> }>(SF.conferirNfePedidos, { lancamentoId: Number(a.lancamentoId) });
+      if (!r.ok || !r.resultado) return { dados: { erro: r.erro }, sucesso: false, resumo: r.erro ?? 'Não consegui conferir a nota.' };
+      return { dados: { origem: r.origem, resultado: r.resultado }, sucesso: true, resumo: String(r.resultado.resumo ?? 'Nota conferida.') };
     }
     case 'buscar_parceiro': {
       const r = await execSF<{ itens?: Linha[] }>(SF.sankhyaParceiros, { busca: a.busca });
