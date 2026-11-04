@@ -7,7 +7,7 @@ import { getMitraErrorMessage } from '../lib/utils';
 export const GRAVACAO_ERP_LIBERADA = false as boolean;
 
 interface Candidato { codparc: number; nome: string; fornecedor: boolean }
-interface Conferencia { destino?: string; entidade?: string; campos?: Record<string, unknown>; parceiro?: { codparc: number; origem: string; nome?: string } }
+interface Conferencia { destino?: string; entidade?: string; campos?: Record<string, unknown>; parceiro?: { codparc: number; origem: string; nome?: string }; correspondencia?: { resumo: string } & Record<string, unknown>; origemDocumento?: string }
 interface RespostaEnvio extends Conferencia { ok: boolean; simulado?: boolean; motivo?: string; mensagem?: string; chave?: string; jaEnviado?: boolean; escolhaParceiro?: boolean; candidatos?: Candidato[]; semParceiro?: boolean }
 
 export function useEnvioErp(lancamentoId: number, aoMudar: () => void) {

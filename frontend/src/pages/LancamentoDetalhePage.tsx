@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, ExternalLink, Pencil, Send, Trash2, X, SearchCheck } from 'lucide-react';
 import { callSF, exigirAfetou, execSF, SF, umaLinha } from '../lib/api';
@@ -19,6 +19,7 @@ import { SkeletonPage } from '../components/ui/Skeleton';
 import { ToastContainer } from '../components/ui/Toast';
 import CampoFornecedor from '../components/CampoFornecedor';
 import PainelRecusaErp from '../components/PainelRecusaErp';
+import ConferenciaPedidos from '../components/ConferenciaPedidos';
 import StatusBadge from '../components/StatusBadge';
 import { Aviso, EstadoErro } from '../components/Comum';
 
@@ -42,6 +43,8 @@ function Campo({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
     </div>
   );
 }
+
+type ResultadoCorrespondencia = ComponentProps<typeof ConferenciaPedidos>['resultado'];
 
 export default function LancamentoDetalhePage() {
   const { id: idParam } = useParams();
@@ -84,6 +87,8 @@ export default function LancamentoDetalhePage() {
   useEffect(() => { carregar(); }, [carregar]);
 
   const envio = useEnvioErp(id, carregar);
+  const [conferindoNota, setConferindoNota] = useState(false);
+  const [notaConferida, setNotaConferida] = useState<{ resultado: ResultadoCorrespondencia; origem?: string } | null>(null);
   const ultimoEnvio = envios[0];
   const enviado = envios.some((e) => e.STATUS === 'OK');
   const parcial = envios.some((e) => e.STATUS === 'PARCIAL');
@@ -112,6 +117,20 @@ export default function LancamentoDetalhePage() {
     }
     const r = await envio.enviar(codparc);
     if (r.ok) addToast('success', r.jaEnviado ? r.mensagem ?? 'Já enviado.' : `Gravado no ERP: chave ${r.chave}.`);
+  }
+
+  // Conferencia da NF-e com os pedidos: so leitura, disponivel em qualquer situacao do lancamento.
+  async function conferirNota() {
+    setConferindoNota(true);
+    try {
+      const r = await execSF<{ ok: boolean; erro?: string; origem?: string; resultado?: ResultadoCorrespondencia }>(SF.conferirNfePedidos, { lancamentoId: id });
+      if (!r.ok || !r.resultado) addToast('error', r.erro ?? 'Não consegui conferir a nota.');
+      else setNotaConferida({ resultado: r.resultado, origem: r.origem });
+    } catch (e) {
+      addToast('error', getMitraErrorMessage(e));
+    } finally {
+      setConferindoNota(false);
+    }
   }
 
   async function abrirArquivo() {
@@ -225,6 +244,16 @@ export default function LancamentoDetalhePage() {
             </Card>
           )}
 
+          {l.TIPO === 'NOTA_FISCAL' && (
+            <Card>
+              <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">Conferência com pedidos</h2></div>
+              <div className="px-5 py-5 flex flex-col gap-3">
+                <p className="text-[13px] text-fg-muted">Compara a nota com os pedidos de compra: candidatos, quantidades, preços, vínculos e divergências. Somente leitura: não cria nota, não altera pedido e não gera provisão.</p>
+                <Button variant="secondary" disabled={conferindoNota} onClick={conferirNota}><SearchCheck size={16} /> {conferindoNota ? 'Conferindo...' : 'Conferir com pedidos'}</Button>
+              </div>
+            </Card>
+          )}
+
           <Card>
             <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">{GRAVACAO_ERP_LIBERADA ? 'Enviar ao ERP' : 'Conferir para o ERP'}</h2></div>
             <div className="px-5 py-5 flex flex-col gap-3">
@@ -241,7 +270,13 @@ export default function LancamentoDetalhePage() {
               {!GRAVACAO_ERP_LIBERADA && podeEnviar && !mensagemRecusa && !envio.candidatos && (
                 <Button variant="secondary" disabled={envio.enviando} onClick={() => enviarAgora()}><SearchCheck size={16} /> {envio.enviando ? 'Conferindo...' : 'Conferir sem gravar'}</Button>
               )}
-              {envio.conferencia && (
+              {envio.conferencia?.correspondencia && (
+                <div className="rounded-xl border border-border-subtle p-4 flex flex-col gap-2">
+                  <p className="text-[13.5px] text-fg">{envio.conferencia.correspondencia.resumo}</p>
+                  <Button variant="secondary" onClick={() => setNotaConferida({ resultado: envio.conferencia?.correspondencia as unknown as ResultadoCorrespondencia, origem: envio.conferencia?.origemDocumento })}><SearchCheck size={16} /> Ver a conferência</Button>
+                </div>
+              )}
+              {envio.conferencia && !envio.conferencia.correspondencia && (
                 <div className="rounded-xl border border-border-subtle p-4 flex flex-col gap-1.5">
                   <p className="text-[13.5px] font-medium text-fg">Conferência sem gravar: passou por todas as guardas.</p>
                   <p className="text-[13px] text-fg-muted">Parceiro {envio.conferencia.parceiro?.codparc} · {envio.conferencia.parceiro?.nome ?? 'sem nome'}</p>
@@ -264,8 +299,8 @@ export default function LancamentoDetalhePage() {
                   <Button disabled={!escolha || envio.enviando} onClick={() => enviarAgora(Number(escolha))}><Send size={16} /> {GRAVACAO_ERP_LIBERADA ? 'Enviar para este parceiro' : 'Conferir com este parceiro'}</Button>
                 </div>
               )}
-              {envio.recusa?.motivo === 'NOTA_PROIBIDA' && !envio.candidatos && <Aviso tipo="info">{envio.recusa.mensagem}</Aviso>}
-              {!enviado && !parcial && mensagemRecusa && envio.recusa?.motivo !== 'NOTA_PROIBIDA' && !envio.candidatos && (
+              {envio.recusa?.motivo === 'CRIACAO_NOTA_BLOQUEADA' && !envio.candidatos && <Aviso tipo="info">{envio.recusa.mensagem}</Aviso>}
+              {!enviado && !parcial && mensagemRecusa && envio.recusa?.motivo !== 'CRIACAO_NOTA_BLOQUEADA' && !envio.candidatos && (
                 <PainelRecusaErp lancamentoId={id} mensagem={mensagemRecusa} semParceiro={envio.recusa?.semParceiro} nomeFornecedor={String(l.NOME_FORNECEDOR ?? '')} administrador={perm.administrador} enviando={envio.enviando} onTentar={() => enviarAgora()} onAviso={addToast} />
               )}
               {envios.length > 0 && (
@@ -309,6 +344,10 @@ export default function LancamentoDetalhePage() {
         message={`Grava ${formatarMoeda(l.VALOR_TOTAL)} de ${l.NOME_FORNECEDOR || 'fornecedor sem nome'} no Sankhya. Esta ação não pode ser desfeita por aqui.`} />
       <ConfirmDialog isOpen={confirmaExclusao} onClose={() => setConfirmaExclusao(false)} onConfirm={excluir} title="Excluir lançamento" confirmLabel="Excluir" loading={ocupado}
         message="Apaga o lançamento, os itens, a trilha e o documento deste sistema. O mesmo arquivo poderá entrar de novo." />
+
+      <Modal isOpen={notaConferida !== null} onClose={() => setNotaConferida(null)} title="Conferência com pedidos" size="xl">
+        {notaConferida && <ConferenciaPedidos resultado={notaConferida.resultado} origem={notaConferida.origem} />}
+      </Modal>
 
       <Modal isOpen={rejeitando} onClose={() => setRejeitando(false)} title="Rejeitar lançamento" size="sm">
         <div className="flex flex-col gap-3">

@@ -1,7 +1,7 @@
 // V-17: a chamada de integracao exposta pela biblioteca do navegador contorna a porta unica?
 // So envia SELECT 1 FROM DUAL pelo servico de consulta. Nunca envia gravacao, em nenhum caso.
 //   node _smoke-v17.mjs
-//   MITRA_TOKEN_BUSINESS=<jwt de um usuario business de teste> node _smoke-v17.mjs
+//   TOKEN_BUSINESS_TESTE=<jwt de um usuario business de teste> node _smoke-v17.mjs
 import dotenv from 'dotenv';
 dotenv.config({ path: new URL('./.env', import.meta.url).pathname, quiet: true });
 
@@ -32,10 +32,10 @@ const invalido = await sondar('token invalido', 'eyJhbGciOiJIUzI1NiJ9.e30.invali
 if (invalido.chegouNoErp) { falhas++; console.log('FALHA: token invalido chegou ao ERP.'); }
 const dev = await sondar('desenvolvedor', process.env.MITRA_TOKEN);
 console.log(`INFO desenvolvedor ${dev.chegouNoErp ? 'alcanca a integracao direto (ele tambem pode alterar as funcoes: nao e fronteira de seguranca para este papel)' : 'nao alcancou a integracao'}.`);
-if (process.env.MITRA_TOKEN_BUSINESS) {
-  const business = await sondar('business', process.env.MITRA_TOKEN_BUSINESS);
+if (process.env.TOKEN_BUSINESS_TESTE) {
+  const business = await sondar('business', process.env.TOKEN_BUSINESS_TESTE);
   if (business.chegouNoErp) { falhas++; console.log('FALHA: usuario business contorna a porta unica (V-17 confirmado).'); } else console.log('OK: usuario business nao alcanca a integracao direto.');
 } else {
-  console.log('PENDENTE: o projeto nao tem usuario business. Rode com MITRA_TOKEN_BUSINESS para concluir o V-17.');
+  console.log('PENDENTE: o projeto nao tem usuario business. Rode com TOKEN_BUSINESS_TESTE para concluir o V-17.');
 }
 process.exit(falhas ? 1 : 0);

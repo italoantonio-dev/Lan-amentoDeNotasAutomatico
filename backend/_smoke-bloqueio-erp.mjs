@@ -16,6 +16,7 @@ import { createRequire } from 'node:module';
 import { montarJS, carregarSFs, DIR_BACKEND } from './lib/base.mjs';
 import { conf, encerrar, totalFalhas, sdk, projectId, consulta, ex, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
 import { JS_COM_ERP, SQL_ALTERADAS, codigoEsperado } from './fase0/funcoes.mjs';
+import { ler as lerErp } from './auditoria/leitura.mjs';
 
 const require = createRequire(import.meta.url);
 const VIVO = process.argv.includes('--vivo');
@@ -408,6 +409,34 @@ if (VIVO && totalFalhas()) {
     conf('ERP_ENVIO terminou igual', (await contar()) === antes, `${antes} linhas`);
     const leitura = await ex('erpVerificarConexao', {});
     conf('leitura do ERP segue funcionando', leitura.configurada === true && leitura.empresas > 0, leitura.erro ?? `${leitura.empresas} empresas`);
+
+    // Conferencia de NF-e publicada, com dados reais e so leitura. O XML e montado em memoria e descartado.
+    const contarLocais = async () => JSON.stringify(await consulta('SELECT (SELECT COUNT(*) FROM LANCAMENTOS) AS L, (SELECT COUNT(*) FROM DOCUMENTOS) AS D, (SELECT COUNT(*) FROM ERP_ENVIO) AS E, (SELECT COUNT(*) FROM APROVADORES) AS A'));
+    const locaisAntes = await contarLocais();
+    const hoje = new Date().toISOString().slice(0, 10);
+    const metaLeitura = { objetivo: 'Teste ao vivo da conferencia', origem: 'TGFCAB, TGFITE, TGFPAP, TGFPAR, TSIEMP', periodo: hoje, filtros: 'um caso real' };
+    const pend = (await lerErp(`SELECT * FROM (SELECT C.NUNOTA, I.SEQUENCIA, I.CODPROD, I.QTDNEG, I.QTDENTREGUE, I.VLRUNIT, I.CODVOL, A.CODPROPARC, P.CGC_CPF, E.CGC
+      FROM TGFCAB C JOIN TGFITE I ON I.NUNOTA = C.NUNOTA JOIN TGFPAP A ON A.CODPARC = C.CODPARC AND A.CODPROD = I.CODPROD JOIN TGFPAR P ON P.CODPARC = C.CODPARC JOIN TSIEMP E ON E.CODEMP = C.CODEMP
+      WHERE C.CODTIPOPER = 1314 AND I.PENDENTE = 'S' AND I.QTDNEG > I.QTDENTREGUE AND P.ATIVO = 'S' AND C.DTNEG <= TO_DATE('${hoje}','YYYY-MM-DD') ORDER BY C.NUNOTA DESC) WHERE ROWNUM <= 1`, metaLeitura))[0];
+    const xmlReal = (cnpjEmit, cnpjDest, itemXml, chave = '35260111222333000181550010000000011123456789') => `<?xml version="1.0"?><nfeProc><NFe><infNFe Id="NFe${chave}"><ide><nNF>999999991</nNF><serie>1</serie><dhEmi>${hoje}T10:00:00-03:00</dhEmi></ide><emit><CNPJ>${cnpjEmit}</CNPJ><xNome>Teste</xNome></emit><dest><CNPJ>${cnpjDest}</CNPJ></dest>${itemXml}<total><ICMSTot><vNF>1.00</vNF></ICMSTot></total></infNFe></NFe></nfeProc>`;
+    if (pend) {
+      const itemXml = `<det nItem="1"><prod><cProd>${pend.CODPROPARC}</cProd><cEAN>SEM GTIN</cEAN><xProd>Teste</xProd><uCom>${pend.CODVOL}</uCom><qCom>1.0000</qCom><vUnCom>${pend.VLRUNIT}</vUnCom><vProd>${pend.VLRUNIT}</vProd></prod></det>`;
+      const c = await ex('conferirNfePedidos', { nome: 'teste.xml', conteudoB64: Buffer.from(xmlReal(pend.CGC_CPF, pend.CGC, itemXml)).toString('base64') });
+      const res = c.resultado;
+      conf('pedido pendente real e encontrado pelo de-para', c.ok === true && res.pedidos.some((p) => Number(p.NUNOTA) === Number(pend.NUNOTA)) && res.itens[0].identificacao.fonte === 'TGFPAP', c.erro ?? res?.situacao);
+      const lin = res?.itens[0]?.linhas.find((x) => Number(x.pedido) === Number(pend.NUNOTA) && Number(x.sequencia) === Number(pend.SEQUENCIA));
+      conf('quantidades e preco vem do ERP', !!lin && Number(lin.negociada) === Number(pend.QTDNEG) && Number(lin.entregue) === Number(pend.QTDENTREGUE) && Number(lin.pendente) === Number(pend.QTDNEG) - Number(pend.QTDENTREGUE) && !lin.divergencias.includes('PRECO_DIFERENTE'), lin ? `${lin.negociada}/${lin.entregue}/${lin.pendente}` : 'sem linha');
+    } else {
+      console.log('INFO sem pedido pendente com de-para hoje: teste do pedido real nao exercitado.');
+    }
+    const nota = (await lerErp(`SELECT * FROM (SELECT C.NUNOTA, C.CHAVENFE, P.CGC_CPF, E.CGC FROM TGFCAB C JOIN TGFPAR P ON P.CODPARC = C.CODPARC JOIN TSIEMP E ON E.CODEMP = C.CODEMP WHERE C.CODTIPOPER = 1419 AND C.CHAVENFE IS NOT NULL AND P.ATIVO = 'S' AND C.DTNEG <= TO_DATE('${hoje}','YYYY-MM-DD') ORDER BY C.NUNOTA DESC) WHERE ROWNUM <= 1`, metaLeitura))[0];
+    if (nota) {
+      const d = await ex('conferirNfePedidos', { nome: 'teste.xml', conteudoB64: Buffer.from(xmlReal(nota.CGC_CPF, nota.CGC, '<det nItem="1"><prod><cProd>SEM-ESTE-CODIGO</cProd><xProd>Teste</xProd><uCom>UN</uCom><qCom>1</qCom><vUnCom>1</vUnCom><vProd>1</vProd></prod></det>', nota.CHAVENFE)).toString('base64') });
+      conf('nota ja existente e apontada como duplicidade pela chave', d.ok === true && d.resultado.duplicidade.some((x) => x.motivo === 'CHAVE' && Number(x.NUNOTA) === Number(nota.NUNOTA)) && d.resultado.alertas.some((a) => a.tipo === 'JA_EXISTE_NO_ERP'), d.erro ?? '');
+    }
+    const pelaTela = await ex('conferirNfePedidos', { lancamentoId: l.lancamentoId });
+    conf('conferencia pelo lancamento responde', pelaTela.ok === true && ['SEM_FORNECEDOR', 'SEM_ITENS', 'PRODUTOS_NAO_IDENTIFICADOS'].includes(pelaTela.resultado.situacao), pelaTela.erro ?? pelaTela.resultado?.situacao);
+    conf('conferencia nao grava neste sistema nem no registro de envios', (await contarLocais()) === locaisAntes);
   } finally {
     await limparLancamento(l.lancamentoId);
   }

@@ -1,6 +1,6 @@
 {
   "projectId": 65898,
-  "geradoEm": "2026-11-04T20:16:13.467Z",
+  "geradoEm": "2026-11-04T21:16:42.505Z",
   "funcoes": [
     {
       "id": 155,
@@ -8,6 +8,13 @@
       "tipo": "JAVASCRIPT",
       "arquivo": "155-conferirCadastroErp.js",
       "descricao": "Confere no ERP, requisito a requisito, se o cadastro do parceiro permite o lancamento. Parametro: lancamentoId (numero)."
+    },
+    {
+      "id": 212,
+      "nome": "conferirNfePedidos",
+      "tipo": "JAVASCRIPT",
+      "arquivo": "212-conferirNfePedidos.js",
+      "descricao": "Confere uma NF-e com os pedidos de compra do piloto (TOP 1314 para 1419/1420). SOMENTE LEITURA: nao cria nota, nao altera pedido, nao gera provisao. Parametros: lancamentoId (numero) OU nome e conteudoB64 (XML da NF-e). Devolve candidatos, itens, quantidades negociada/entregue/pendente, precos, divergencias, vinculos, ambiguidade e duplicidade."
     },
     {
       "id": 156,
@@ -28,7 +35,7 @@
       "nome": "enviarLancamentoParaErp",
       "tipo": "JAVASCRIPT",
       "arquivo": "139-enviarLancamentoParaErp.js",
-      "descricao": "Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar. Gravacao no ERP desligada (Fase 0): sem simular a funcao recusa com GRAVACAO_BLOQUEADA. Nota de entrada nunca e criada aqui. Parametros: lancamentoId (numero); simular (S); opcional codparc."
+      "descricao": "Confere o lancamento contra o ERP pelas mesmas guardas do envio. Com simular=S devolve o que seria enviado, sem gravar; nota de entrada e conferida com os pedidos de compra. Gravacao no ERP desligada (Fase 0): sem simular recusa com GRAVACAO_BLOQUEADA. Criacao de nota bloqueada ate homologacao. Parametros: lancamentoId (numero); simular (S); opcional codparc."
     },
     {
       "id": 115,

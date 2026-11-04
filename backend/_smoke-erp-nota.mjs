@@ -1,6 +1,6 @@
-// Nota de entrada: desde a Fase 0 este sistema nao cria nota, nem na conferencia. NAO grava.
-// A nota nasce do pedido de compra dentro do Sankhya. As guardas antigas de nota (produto, TOP)
-// ficaram inalcancaveis; quem cobre a recusa em todos os caminhos e _smoke-bloqueio-erp.mjs.
+// Nota de entrada: a conferencia compara com os pedidos, so lendo; criar nota esta bloqueado
+// (temporario, ate haver servico oficial homologado e autorizacao). NAO grava. As recusas em todos
+// os caminhos, e a conferencia com dados reais, estao em _smoke-bloqueio-erp.mjs.
 import { ex, uma, conf, encerrar, consulta, primeiraEmpresa, tipo, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
 
 const e = await primeiraEmpresa();
@@ -20,9 +20,9 @@ try {
   criados.push(n.lancamentoId);
   conf('nota abaixo do limite nasce aprovada', n.status === 'APROVADO', n.status);
   const conferencia = await ex('enviarLancamentoParaErp', { lancamentoId: n.lancamentoId, simular: 'S' });
-  conf('conferencia de nota recusa e explica', conferencia.ok === false && conferencia.motivo === 'NOTA_PROIBIDA' && /pedido de compra/.test(conferencia.mensagem), conferencia.mensagem);
+  conf('conferencia de nota vai para a correspondencia com pedidos', conferencia.ok === true && conferencia.entidade === 'CorrespondenciaPedido' && Boolean(conferencia.correspondencia.situacao), conferencia.mensagem);
   const real = await ex('enviarLancamentoParaErp', { lancamentoId: n.lancamentoId });
-  conf('envio real de nota recusa', real.ok === false && real.motivo === 'NOTA_PROIBIDA', real.motivo);
+  conf('envio real de nota recusa', real.ok === false && real.motivo === 'GRAVACAO_BLOQUEADA', real.motivo);
   const situacao = await uma('obterLancamento', { id: n.lancamentoId });
   conf('recusa nao muda a situacao do lancamento', situacao.STATUS === 'APROVADO', situacao.STATUS);
   conf('nada entrou no registro de envios', (await envios()) === enviosAntes);
@@ -31,4 +31,4 @@ try {
   const atual = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
   if (!antes && atual) await ex('excluirParametro', { id: atual.ID });
 }
-encerrar('Nota de entrada proibida');
+encerrar('Nota de entrada');

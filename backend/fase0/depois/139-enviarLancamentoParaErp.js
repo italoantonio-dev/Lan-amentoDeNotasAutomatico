@@ -1,7 +1,7 @@
 // Apoio comum das SFs JavaScript. Fica em arquivo e e concatenado por lib/base.mjs.
 const sdk = require('mitra-sdk');
 const PROJECT_ID = Number(process.env.MITRA_PROJECT_ID);
-const SF = {"registrarLog":63,"erpDadosEnvio":133,"parceiroJaEscolhidoParaCnpj":132,"corrigirDadosLancamentoParceiro":138,"listarItensLancamento":55,"erpReservarEnvio":136,"erpRegistrarEnvio":135,"erpConcluirEnvio":137};
+const SF = {"registrarLog":63,"erpDadosEnvio":133,"conferirNfePedidos":212,"parceiroJaEscolhidoParaCnpj":132,"corrigirDadosLancamentoParceiro":138,"listarItensLancamento":55,"erpReservarEnvio":136,"erpRegistrarEnvio":135,"erpConcluirEnvio":137};
 let __contador = 0;
 
 function msgErro(e) {
@@ -47,12 +47,17 @@ const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.s
 // Nenhum parametro de tela, de banco ou de input liga a gravacao: religar exige autorizacao
 // escrita e uma mudanca revisada nesta linha, publicada de novo em todas as SFs que usam este arquivo.
 const GRAVACAO_ERP_HABILITADA = false;
+// Criacao de nota: proibicao TEMPORARIA, separada da trava geral. So religa com servico oficial
+// homologado (V-01, V-03) e autorizacao explicita. O caminho previsto e faturar um pedido de compra
+// existente e salvar a nota resultante NAO CONFIRMADA. Ligar esta linha nao libera confirmacao.
+const CRIACAO_NOTA_HABILITADA = false;
+const ENTIDADES_DE_NOTA = ['CabecalhoNota', 'ItemNota'];
 // Unica porta de saida para o ERP. Servico fora desta lista nao sai, ligado ou desligado.
 const SERVICOS_ERP = {
   'DbExplorerSP.executeQuery': { endpoint: EP_CONSULTA, leitura: true },
   'CRUDServiceProvider.saveRecord': { endpoint: EP_SALVAR, leitura: false },
 };
-// Regra permanente: o sistema nunca confirma nota. Vale mesmo com a gravacao ligada.
+// Regra PERMANENTE: o sistema nunca confirma nota. Vale com qualquer trava ligada.
 const SERVICO_DE_CONFIRMACAO = /confirm/i;
 // Defesa a mais na leitura: o texto entre aspas e ignorado (nome de parceiro pode conter "MERGE").
 // Comentario e recusado porque esconderia uma aspa dessa conta e, com ela, um segundo comando.
@@ -63,7 +68,7 @@ function erroBloqueio(codigo, mensagem) {
   e.codigo = codigo;
   return e;
 }
-const ehBloqueioErp = (e) => !!e && (e.codigo === 'GRAVACAO_BLOQUEADA' || e.codigo === 'CONFIRMACAO_PROIBIDA' || e.codigo === 'SERVICO_NAO_PERMITIDO' || e.codigo === 'SQL_NAO_E_LEITURA');
+const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA'].includes(e.codigo);
 
 function exigirSqlDeLeitura(sql) {
   const semTexto = String(sql || '').replace(/'(?:[^']|'')*'/g, "''");
@@ -81,6 +86,10 @@ async function erpChamar(servico, requestBody) {
   if (!s) throw erroBloqueio('SERVICO_NAO_PERMITIDO', 'Serviço do ERP fora da lista permitida: ' + String(servico).slice(0, 80) + '.');
   if (!s.leitura && !GRAVACAO_ERP_HABILITADA) {
     throw erroBloqueio('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya.');
+  }
+  const entidade = requestBody && requestBody.dataSet && requestBody.dataSet.rootEntity;
+  if (!s.leitura && ENTIDADES_DE_NOTA.includes(entidade) && !CRIACAO_NOTA_HABILITADA) {
+    throw erroBloqueio('CRIACAO_NOTA_BLOQUEADA', 'Criação de nota no ERP bloqueada até existir serviço oficial homologado e autorização explícita.');
   }
   if (s.leitura) exigirSqlDeLeitura(requestBody && requestBody.sql);
   return sdk.callIntegrationMitra({
@@ -177,15 +186,30 @@ const d = await uma(SF.erpDadosEnvio, { id });
 if (!d) return { ok: false, motivo: 'NAO_ENCONTRADO', mensagem: 'Lançamento não encontrado, ou fora dos tipos que você enxerga.' };
 const destino = d.DESTINO_ERP || d.DESTINO_PADRAO || 'FINANCEIRO';
 
-// FASE 0. Nota de entrada nao nasce aqui, nem na conferencia: ela vem do pedido de compra
-// dentro do Sankhya e so uma pessoa confirma. Recusa permanente, independente da trava geral.
-if (destino === 'NOTA') {
-  return recusar('NOTA_PROIBIDA', 'Este sistema não cria nota de entrada no ERP. A nota é gerada no Sankhya a partir do pedido de compra e confirmada por uma pessoa autorizada.');
-}
-// Com a gravacao desligada, o envio real para antes de qualquer reserva ou consulta.
+// FASE 0. Com a gravacao desligada, o envio real para antes de qualquer reserva ou consulta.
 // A conferencia (simular) segue igual: le o ERP e mostra o que seria enviado.
 if (!simular && !GRAVACAO_ERP_HABILITADA) {
   return recusar('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya. Use "Conferir sem gravar" para ver o que seria enviado.');
+}
+// Nota de entrada. Conferir e somente leitura: compara a NF-e com os pedidos de compra. Criar a
+// nota esta bloqueado (temporario, CRIACAO_NOTA_HABILITADA); o caminho previsto e faturar o pedido
+// existente e salvar a nota NAO confirmada, com servico oficial homologado. Confirmar e sempre manual.
+if (destino === 'NOTA') {
+  if (simular) {
+    try {
+      const c = await chamar(SF.conferirNfePedidos, { lancamentoId: id });
+      if (!c || !c.ok) return { ok: false, motivo: 'CONFERENCIA_FALHOU', destino, mensagem: (c && c.erro) || 'Não consegui conferir a nota com os pedidos.' };
+      return { ok: true, simulado: true, destino, entidade: 'CorrespondenciaPedido', correspondencia: c.resultado, origemDocumento: c.origem, mensagem: c.resultado.resumo };
+    } catch (e) {
+      return { ok: false, motivo: 'CONFERENCIA_FALHOU', destino, mensagem: 'Não consegui conferir a nota com os pedidos: ' + msgErro(e) };
+    }
+  }
+  if (!CRIACAO_NOTA_HABILITADA) {
+    return recusar('CRIACAO_NOTA_BLOQUEADA', 'Criar nota no ERP está bloqueado até existir serviço oficial de faturamento de pedido homologado e autorização explícita. A conferência com os pedidos continua disponível, sem gravar.');
+  }
+  // Mesmo com as duas travas ligadas, nao ha caminho de gravacao de nota: o faturamento do pedido
+  // ainda nao foi implementado, e a criacao avulsa (abaixo) nao e o caminho previsto.
+  return recusar('FATURAMENTO_NAO_IMPLEMENTADO', 'O faturamento de pedido ainda não foi implementado nem homologado. Nada foi enviado ao Sankhya.');
 }
 
 // 1. Ja enviado: devolve a chave existente em vez de criar um segundo titulo.
@@ -332,8 +356,8 @@ if (destino === 'FINANCEIRO') {
   }
 }
 
-// Destino NOTA: cabecalho e itens. Inalcancavel desde a Fase 0 (recusa NOTA_PROIBIDA no topo);
-// o codigo fica para referencia e nao deve ser religado: a nota nasce do pedido, no Sankhya.
+// Destino NOTA por criacao avulsa: cabecalho e itens. Inalcancavel desde a Fase 0 (o destino NOTA
+// retorna no topo). Fica para referencia; o caminho previsto e o faturamento do pedido.
 let codTipVenda = 0;
 try {
   const tv = await erpConsulta('SELECT CODTIPVENDA FROM (SELECT CODTIPVENDA FROM TGFCAB WHERE CODTIPOPER = ' + Number(d.CODTIPOPER) + ' AND CODEMP = ' + Number(d.CODEMP) + ' ORDER BY DTNEG DESC) WHERE ROWNUM = 1');

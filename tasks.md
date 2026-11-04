@@ -28,6 +28,8 @@
 |---|------|--------|--------|
 | MD-A | Auditoria somente leitura dos parâmetros | ✅ done | auditoria/ |
 | MD-P | Proposta de arquitetura | ✅ aprovada com condições | modulo-documental/proposta-arquitetura.md |
-| MD-0 | Fase 0: travas de gravação, testes de bloqueio, reversão | ✅ done, aguarda validação | modulo-documental/fase0-plano-execucao.md |
-| MD-1/2 | Leitura e correspondência de pedidos (piloto TOP 1314 → 1419/1420), só consultas | ⏳ pending | começa após a validação da Fase 0 |
+| MD-0 | Fase 0: travas de gravação, testes de bloqueio, reversão | ✅ aprovada, com ajustes feitos | modulo-documental/fase0-plano-execucao.md |
+| MD-0a | Ajustes: criação de nota temporária, conferência de NF-e, investigação do V-17 | ✅ done | V-17 aberto para business; correção depende de decisão |
+| MD-1/2 | Motor de correspondência do piloto TOP 1314 → 1419/1420, só consultas | ✅ primeiro incremento, aguarda revisão | modulo-documental/motor-correspondencia.md |
+| MD-1/2b | Próximos incrementos: trilha de conferência, fila de revisão, operação assistida | ⏳ pending | depois da revisão |
 | MD-3/4/5 | Faturamento, piloto e expansão | ⛔ não autorizadas | — |

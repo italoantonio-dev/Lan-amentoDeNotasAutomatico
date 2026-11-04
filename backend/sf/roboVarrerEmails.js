@@ -41,9 +41,9 @@ try {
   const ids = (lista.messages || []).map((m) => m.id);
   const jaLidas = new Set((ids.length ? await listar(SF.roboMensagensProcessadas, { ids: ids.join(',') }) : []).map((r) => r.MENSAGEM_ID));
   const novas = ids.filter((i) => !jaLidas.has(i)).slice(0, max);
-  // Cada documento custa cerca de 20 execucoes, e chamada entre SFs conta no limite por minuto do
+  // Cada documento custa cerca de 26 execucoes (nota inclui a conferencia com pedidos), e chamada entre SFs conta no limite por minuto do
   // projeto. O resto fica para a proxima rodada: quem usa as telas nao pode ser barrado pelo robo.
-  const TETO_ANEXOS = 10;
+  const TETO_ANEXOS = 8;
   let parouPorTeto = false;
   const empresas = await listar(SF.roboEmpresas, {});
   const tipos = await listar(SF.listarTiposDocumento, {});

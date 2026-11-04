@@ -92,15 +92,18 @@ conf('14 parceiro com o mesmo CNPJ e considerado', r.situacao === 'PEDIDO_UNICO'
 
 // 15. Fontes de identificacao
 const id = (i) => identificarProduto(i, [10, 11], DEPARA, REFS);
-conf('15 de-para do Sankhya vem antes da referencia', id({ cProd: 'ABC-1' }).codprods.join() === '500' && id({ cProd: 'ABC-1' }).fonte === 'TGFPAP');
-conf('15 referencia do fornecedor quando nao ha de-para', id({ cProd: 'RF-650' }).fonte === 'REFFORN' && id({ cProd: 'RF-650' }).codprods.join() === '650');
-conf('15 GTIN contra a referencia do produto', id({ cProd: '', cEAN: '7890000000017' }).fonte === 'GTIN');
-conf('15 GTIN "SEM GTIN" nao identifica', id({ cProd: '', cEAN: 'SEM GTIN' }).situacao === 'NAO_IDENTIFICADO');
+conf('15 de-para do Sankhya identifica, mesmo com referencia apontando outro produto', id({ cProd: 'ABC-1' }).codprods.join() === '500' && id({ cProd: 'ABC-1' }).fonte === 'TGFPAP');
+conf('15 referencia do fornecedor so sugere: nao identifica', id({ cProd: 'RF-650' }).situacao === 'NAO_IDENTIFICADO' && id({ cProd: 'RF-650' }).sugestoes.join() === '650');
+conf('15 GTIN nao identifica', id({ cProd: '', cEAN: '7890000000017' }).situacao === 'NAO_IDENTIFICADO' && id({ cProd: '', cEAN: 'SEM GTIN' }).situacao === 'NAO_IDENTIFICADO');
+conf('15 referencia generica do produto nao identifica nem sugere', id({ cProd: '7890000000017' }).situacao === 'NAO_IDENTIFICADO' && id({ cProd: '7890000000017' }).sugestoes.length === 0);
 conf('15 de-para de outro parceiro nao vale', id({ cProd: 'OUTRO' }).situacao === 'NAO_IDENTIFICADO');
 conf('15 codigo com dois produtos: AMBIGUO', id({ cProd: 'DUP' }).situacao === 'AMBIGUO' && id({ cProd: 'DUP' }).codprods.length === 2);
 conf('15 caixa e espacos nas pontas nao atrapalham', id({ cProd: '  abc-1 ' }).codprods.join() === '500');
 conf('15 zero a esquerda nao e removido (regra nao inventada)', id({ cProd: '0ABC-1' }).situacao === 'NAO_IDENTIFICADO');
 conf('15 produto informado por uma pessoa vale', id({ codprod: 42 }).fonte === 'INFORMADO');
+
+r = rodar([item({ cProd: 'RF-650' })], [pedido(1095, [linha({ CODPROD: 650 })])]);
+conf('15 sugestao mostra a linha do pedido, mas nao decide', r.situacao === 'PRODUTOS_NAO_IDENTIFICADOS' && r.itens[0].linhasSugeridas.length === 1 && r.pedidos.length === 0, r.situacao);
 
 // 16. Sem empresa / sem fornecedor
 r = conferir({ documento: { itens: [item()] }, empresas: [], parceiros: PARCEIROS, pedidos: [] });

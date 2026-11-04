@@ -47,12 +47,17 @@ const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.s
 // Nenhum parametro de tela, de banco ou de input liga a gravacao: religar exige autorizacao
 // escrita e uma mudanca revisada nesta linha, publicada de novo em todas as SFs que usam este arquivo.
 const GRAVACAO_ERP_HABILITADA = false;
+// Criacao de nota: proibicao TEMPORARIA, separada da trava geral. So religa com servico oficial
+// homologado (V-01, V-03) e autorizacao explicita. O caminho previsto e faturar um pedido de compra
+// existente e salvar a nota resultante NAO CONFIRMADA. Ligar esta linha nao libera confirmacao.
+const CRIACAO_NOTA_HABILITADA = false;
+const ENTIDADES_DE_NOTA = ['CabecalhoNota', 'ItemNota'];
 // Unica porta de saida para o ERP. Servico fora desta lista nao sai, ligado ou desligado.
 const SERVICOS_ERP = {
   'DbExplorerSP.executeQuery': { endpoint: EP_CONSULTA, leitura: true },
   'CRUDServiceProvider.saveRecord': { endpoint: EP_SALVAR, leitura: false },
 };
-// Regra permanente: o sistema nunca confirma nota. Vale mesmo com a gravacao ligada.
+// Regra PERMANENTE: o sistema nunca confirma nota. Vale com qualquer trava ligada.
 const SERVICO_DE_CONFIRMACAO = /confirm/i;
 // Defesa a mais na leitura: o texto entre aspas e ignorado (nome de parceiro pode conter "MERGE").
 // Comentario e recusado porque esconderia uma aspa dessa conta e, com ela, um segundo comando.
@@ -63,7 +68,7 @@ function erroBloqueio(codigo, mensagem) {
   e.codigo = codigo;
   return e;
 }
-const ehBloqueioErp = (e) => !!e && (e.codigo === 'GRAVACAO_BLOQUEADA' || e.codigo === 'CONFIRMACAO_PROIBIDA' || e.codigo === 'SERVICO_NAO_PERMITIDO' || e.codigo === 'SQL_NAO_E_LEITURA');
+const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA'].includes(e.codigo);
 
 function exigirSqlDeLeitura(sql) {
   const semTexto = String(sql || '').replace(/'(?:[^']|'')*'/g, "''");
@@ -81,6 +86,10 @@ async function erpChamar(servico, requestBody) {
   if (!s) throw erroBloqueio('SERVICO_NAO_PERMITIDO', 'Serviço do ERP fora da lista permitida: ' + String(servico).slice(0, 80) + '.');
   if (!s.leitura && !GRAVACAO_ERP_HABILITADA) {
     throw erroBloqueio('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya.');
+  }
+  const entidade = requestBody && requestBody.dataSet && requestBody.dataSet.rootEntity;
+  if (!s.leitura && ENTIDADES_DE_NOTA.includes(entidade) && !CRIACAO_NOTA_HABILITADA) {
+    throw erroBloqueio('CRIACAO_NOTA_BLOQUEADA', 'Criação de nota no ERP bloqueada até existir serviço oficial homologado e autorização explícita.');
   }
   if (s.leitura) exigirSqlDeLeitura(requestBody && requestBody.sql);
   return sdk.callIntegrationMitra({
@@ -362,9 +371,15 @@ function lerXml(texto) {
   const icmsTot = tag(texto, 'ICMSTot');
   const cobr = tag(texto, 'cobr');
   const dups = [...cobr.matchAll(/<(?:\w+:)?dup>([\s\S]*?)<\/(?:\w+:)?dup>/g)].map((m) => valorTag(m[1], 'dVenc')).filter(Boolean);
-  const itens = [...texto.matchAll(/<(?:\w+:)?det\b[^>]*>([\s\S]*?)<\/(?:\w+:)?det>/g)].map((m) => {
-    const prod = tag(m[1], 'prod');
-    return { descricao: valorTag(prod, 'xProd').slice(0, 300), quantidade: Number(valorTag(prod, 'qCom')) || 1, valorUnitario: Number(valorTag(prod, 'vUnCom')) || Number(valorTag(prod, 'vProd')) || 0, codprod: 0 };
+  // Codigo do fornecedor, GTIN e unidade alimentam a conferencia com pedidos; o nucleo de criacao
+  // so le descricao, quantidade, valor unitario e codprod.
+  const itens = [...texto.matchAll(/<(?:\w+:)?det\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?det>/g)].map((m) => {
+    const prod = tag(m[2], 'prod');
+    const nItem = (/nItem="(\d+)"/.exec(m[1]) || [])[1] || '';
+    return {
+      descricao: valorTag(prod, 'xProd').slice(0, 300), quantidade: Number(valorTag(prod, 'qCom')) || 1, valorUnitario: Number(valorTag(prod, 'vUnCom')) || Number(valorTag(prod, 'vProd')) || 0, codprod: 0,
+      nItem: nItem ? Number(nItem) : null, cProd: valorTag(prod, 'cProd').slice(0, 60), cEAN: valorTag(prod, 'cEAN').slice(0, 20), unidade: valorTag(prod, 'uCom').slice(0, 10), valorTotal: Number(valorTag(prod, 'vProd')) || 0,
+    };
   });
   const emissao = (valorTag(ide, 'dhEmi') || valorTag(ide, 'dEmi')).slice(0, 10);
   const valor = Number(valorTag(icmsTot, 'vNF')) || 0;
@@ -686,8 +701,11 @@ async function processarAnexo(ctx) {
 
   // Sempre 'S': a conferencia le o ERP e devolve o que seria enviado, sem reservar nem gravar.
   const envio = await chamar(SF.enviarLancamentoParaErp, { lancamentoId: criado.lancamentoId, simular: 'S' });
-  // Nota de entrada nao e erro do robo: ela nasce do pedido de compra, dentro do Sankhya.
-  if (envio && envio.motivo === 'NOTA_PROIBIDA') return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada. Este sistema não cria a nota; ela segue pelo pedido de compra no Sankhya, com confirmação por uma pessoa.', base);
+  // Nota de entrada: a conferencia compara com os pedidos de compra, so lendo. Nao e erro do robo.
+  if (envio && (envio.entidade === 'CorrespondenciaPedido' || envio.motivo === 'CONFERENCIA_FALHOU')) {
+    const sobre = envio.ok ? 'conferida com os pedidos: ' + envio.mensagem : 'a conferência com os pedidos não terminou: ' + envio.mensagem;
+    return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada ' + sobre + ' Nada foi criado no ERP.', base);
+  }
   if (simulacao) {
     if (envio && envio.ok) return fechar('SIMULADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: estaria pronto para conferência. Na simulação nada é gravado.', base);
     return fechar('ERRO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ', mas a conferência parou: ' + ((envio && envio.mensagem) || 'motivo desconhecido'), base);
@@ -740,9 +758,9 @@ try {
   const ids = (lista.messages || []).map((m) => m.id);
   const jaLidas = new Set((ids.length ? await listar(SF.roboMensagensProcessadas, { ids: ids.join(',') }) : []).map((r) => r.MENSAGEM_ID));
   const novas = ids.filter((i) => !jaLidas.has(i)).slice(0, max);
-  // Cada documento custa cerca de 20 execucoes, e chamada entre SFs conta no limite por minuto do
+  // Cada documento custa cerca de 26 execucoes (nota inclui a conferencia com pedidos), e chamada entre SFs conta no limite por minuto do
   // projeto. O resto fica para a proxima rodada: quem usa as telas nao pode ser barrado pelo robo.
-  const TETO_ANEXOS = 10;
+  const TETO_ANEXOS = 8;
   let parouPorTeto = false;
   const empresas = await listar(SF.roboEmpresas, {});
   const tipos = await listar(SF.listarTiposDocumento, {});
