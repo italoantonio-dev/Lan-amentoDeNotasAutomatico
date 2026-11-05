@@ -103,7 +103,8 @@ function imapParametro(valor, nome) {
   return s ? imapPalavraMime(s[1] != null ? s[1] : s[2]) : '';
 }
 
-function imapAnexosPdf(bruto, saida, prof) {
+function imapAnexosPdf(bruto, saida, prof, ext) {
+  const extensao = ext || /\.pdf$/i;
   saida = saida || [];
   const prf = prof || 0;
   if (prf > 10) return saida;
@@ -124,14 +125,14 @@ function imapAnexosPdf(bruto, saida, prof) {
       if (corpo.slice(inicio, inicio + 2).toString() === '--') break;
       const prox = corpo.indexOf(marca, inicio);
       const parte = corpo.slice(inicio, prox < 0 ? corpo.length : prox);
-      imapAnexosPdf(parte.slice(parte.indexOf('\n') + 1), saida, prf + 1);
+      imapAnexosPdf(parte.slice(parte.indexOf('\n') + 1), saida, prf + 1, extensao);
       pos = prox;
     }
     return saida;
   }
-  if (/^message\/rfc822/i.test(tipo)) return imapAnexosPdf(corpo, saida, prf + 1);
+  if (/^message\/rfc822/i.test(tipo)) return imapAnexosPdf(corpo, saida, prf + 1, extensao);
   const nome = imapParametro(cab['content-disposition'], 'filename') || imapParametro(tipo, 'name');
-  if (!/\.pdf$/i.test(nome)) return saida;
+  if (!extensao.test(nome)) return saida;
   const enc = String(cab['content-transfer-encoding'] || '').toLowerCase();
   const buffer = enc === 'base64' ? Buffer.from(corpo.toString('latin1').replace(/\s+/g, ''), 'base64') : enc === 'quoted-printable' ? imapQp(corpo.toString('latin1')) : corpo;
   saida.push({ nome, buffer });
@@ -154,7 +155,8 @@ async function imapAbrir(dados, conectar) {
 }
 
 // Ids novos primeiro. O cabecalho e a estrutura bastam para filtrar sem baixar anexo.
-async function imapCandidatos(s, palavras, dias, agora) {
+// Caixa de notas: so XML, sem palavra. E outra caixa, entao o id leva outro prefixo (UIDs se repetem entre caixas).
+async function imapCandidatos(s, palavras, dias, agora, notas) {
   const d = new Date((agora || Date.now()) - dias * 86400000);
   const desde = d.getUTCDate() + '-' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()] + '-' + d.getUTCFullYear();
   const achado = (await s.comando('UID SEARCH SINCE ' + desde)).map((l) => /^\* SEARCH(.*)$/.exec(l.texto)).find(Boolean);
@@ -169,16 +171,20 @@ async function imapCandidatos(s, palavras, dias, agora) {
     const tam = /RFC822\.SIZE (\d+)/.exec(l.texto);
     if (tam && Number(tam[1]) > 25 * 1024 * 1024) return;
     const est = imapSemAcento(l.texto);
-    if (!/\.pdf|"application" "pdf"|"application" "octet-stream"/.test(est)) return;
+    if (!(notas ? /\.xml|"application" "xml"|"text" "xml"|"application" "octet-stream"/ : /\.pdf|"application" "pdf"|"application" "octet-stream"/).test(est)) return;
     const assunto = l.literais[0] ? imapCabecalhos(l.literais[0].toString('latin1')).subject || '' : '';
     const alvo = imapSemAcento(imapPalavraMime(assunto)) + ' ' + est;
     if (lista.length && !lista.some((p) => alvo.includes(p))) return;
     ids.push(Number(uid[1]));
   });
-  return ids.sort((a, b) => b - a).map((u) => 'imap:' + s.uidValidity + ':' + u);
+  return ids.sort((a, b) => b - a).map((u) => (notas ? 'imapnotas:' : 'imap:') + s.uidValidity + ':' + u);
 }
 
+// Na caixa de notas, XML que nao e NF-e e descartado aqui, sem chegar ao robo.
+const imapEhNfe = (buffer) => /<(nfeProc|NFe)[\s>]/.test(buffer.toString('utf8'));
+
 async function imapBaixar(s, id) {
+  const notas = String(id).startsWith('imapnotas:');
   const uid = String(id).split(':')[2];
   const l = (await s.comando('UID FETCH ' + uid + ' (BODY.PEEK[])')).find((x) => x.literais.length);
   if (!l) throw new Error('A mensagem não está mais na caixa.');
@@ -189,17 +195,18 @@ async function imapBaixar(s, id) {
   return {
     cab: { from: imapPalavraMime(cab.from), subject: imapPalavraMime(cab.subject) },
     recebido: Number.isNaN(data) ? '' : new Date(data).toISOString().slice(0, 19),
-    anexos: imapAnexosPdf(bruto),
+    anexos: notas ? imapAnexosPdf(bruto, [], 0, /\.xml$/i).filter((a) => imapEhNfe(a.buffer)) : imapAnexosPdf(bruto),
   };
 }
 
 // A senha fica num arquivo privado, fora de tabela e do log das SFs. So administrador alcanca a key.
-async function imapDados(config) {
-  if (!config.IMAP_HOST || !config.IMAP_USUARIO) throw new Error('IMAP_SEM_SENHA: caixa não configurada.');
-  const linha = await uma(SF.roboImapSegredo, {});
-  if (!linha || !linha.VALOR) throw new Error('IMAP_SEM_SENHA: a senha da caixa ainda não foi informada, ou você não é administrador.');
+async function imapDados(config, caixa) {
+  const usuario = caixa === 'notas' ? config.IMAP_NOTAS_USUARIO : config.IMAP_USUARIO;
+  if (!config.IMAP_HOST || !usuario) throw new Error('IMAP_SEM_SENHA: caixa não configurada.');
+  const linha = await uma(SF.roboImapSegredo, { caixa: caixa || 'boletos' });
+  if (!linha || !linha.VALOR) throw new Error('IMAP_SEM_SENHA: a senha da caixa ' + usuario + ' ainda não foi informada, ou você não é administrador.');
   const arq = await sdk.downloadFilePrivateMitra({ projectId: PROJECT_ID, key: linha.VALOR });
   const senha = await arq.text();
   if (!senha || /[\r\n]/.test(senha)) throw new Error('IMAP_SEM_SENHA: a senha guardada é inválida.');
-  return { host: config.IMAP_HOST, usuario: config.IMAP_USUARIO, senha };
+  return { host: config.IMAP_HOST, usuario, senha };
 }

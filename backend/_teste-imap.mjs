@@ -13,6 +13,10 @@ const msg = Buffer.from([
   'Content-Type: multipart/mixed; boundary="x1"', '', '--x1', 'Content-Type: text/plain', '', 'corpo', '--x1',
   'Content-Type: application/pdf', "Content-Disposition: attachment; filename*=UTF-8''cobran%C3%A7a.pdf", 'Content-Transfer-Encoding: base64', '', pdf.toString('base64'), '--x1',
   'Content-Type: image/png; name="a.png"', 'Content-Transfer-Encoding: base64', '', 'AAAA', '--x1--', ''].join('\r\n'));
+const msgNotas = Buffer.from(['From: a@b.com', 'Subject: oi', 'Content-Type: multipart/mixed; boundary="x2"', '', '--x2',
+  'Content-Type: application/xml', 'Content-Disposition: attachment; filename="nota.xml"', '', '<nfeProc><NFe/></nfeProc>', '--x2',
+  'Content-Type: application/xml', 'Content-Disposition: attachment; filename="outro.xml"', '', '<pedido/>', '--x2',
+  'Content-Type: application/pdf', 'Content-Disposition: attachment; filename="pessoal.pdf"', '', '%PDF', '--x2--', ''].join('\r\n'));
 const comandos = [];
 const srv = net.createServer((s) => {
   s.write('* OK pronto\r\n');
@@ -32,8 +36,9 @@ const srv = net.createServer((s) => {
         const h1 = 'Subject: =?ISO-8859-1?Q?Cobran=E7a?=\r\n\r\n'; const h2 = 'Subject: oi\r\n\r\n';
         s.write(`* 1 FETCH (UID 10 RFC822.SIZE 100 BODYSTRUCTURE (("APPLICATION" "PDF" NIL NIL NIL "BASE64" 5)) BODY[HEADER.FIELDS (SUBJECT)] {${h1.length}}\r\n${h1})\r\n`);
         s.write(`* 2 FETCH (UID 11 RFC822.SIZE 100 BODYSTRUCTURE (("APPLICATION" "PDF" NIL NIL NIL "BASE64" 5)) BODY[HEADER.FIELDS (SUBJECT)] {${h2.length}}\r\n${h2})\r\n`);
-        s.write(`* 3 FETCH (UID 12 RFC822.SIZE 100 BODYSTRUCTURE ("TEXT" "PLAIN" NIL NIL NIL "7BIT" 5) BODY[HEADER.FIELDS (SUBJECT)] {${h1.length}}\r\n${h1})\r\n${tag} OK\r\n`);
-      } else if (c.includes('BODY.PEEK[]')) { s.write(`* 1 FETCH (BODY[] {${msg.length}}\r\n`); s.write(msg); s.write(`)\r\n${tag} OK\r\n`); }
+        s.write(`* 3 FETCH (UID 12 RFC822.SIZE 100 BODYSTRUCTURE ("TEXT" "PLAIN" NIL NIL NIL "7BIT" 5) BODY[HEADER.FIELDS (SUBJECT)] {${h1.length}}\r\n${h1})\r\n`);
+        s.write(`* 4 FETCH (UID 13 RFC822.SIZE 100 BODYSTRUCTURE (("APPLICATION" "XML" ("NAME" "nota.xml") NIL NIL "BASE64" 5)) BODY[HEADER.FIELDS (SUBJECT)] {${h2.length}}\r\n${h2})\r\n${tag} OK\r\n`);
+      } else if (c.includes('BODY.PEEK[]')) { const corpo = c.startsWith('UID FETCH 13 ') ? msgNotas : msg; s.write(`* 1 FETCH (BODY[] {${corpo.length}}\r\n`); s.write(corpo); s.write(`)\r\n${tag} OK\r\n`); }
       else s.write(`${tag} BAD\r\n`);
     }
   });
@@ -54,6 +59,12 @@ conf('conteudo do PDF identico', m.anexos[0].buffer.equals(pdf));
 conf('data de recebimento', m.recebido === '2026-11-05T13:00:00', m.recebido);
 s.fechar();
 conf('nenhum comando altera a caixa', !comandos.some((c) => /STORE|EXPUNGE|DELETE|MOVE|COPY|APPEND|SELECT /.test(c) || /BODY\[\]/.test(c)), comandos.join('|'));
+const sn = await api.imapAbrir({ usuario: 'u', senha: 'x' }, conectar);
+const idsNotas = await api.imapCandidatos(sn, [], 7, Date.UTC(2026, 10, 5), true);
+conf('caixa de notas ignora PDF e usa prefixo proprio', idsNotas.join() === 'imapnotas:77:13', idsNotas.join());
+const baixada = await api.imapBaixar(sn, 'imapnotas:77:13');
+conf('caixa de notas descarta PDF e XML que nao e NF-e', baixada.anexos.length === 1 && baixada.anexos[0].nome === 'nota.xml', JSON.stringify(baixada.anexos.map((a) => a.nome)));
+sn.fechar();
 let erro = '';
 await api.imapAbrir({ usuario: 'u', senha: 'errada' }, conectar).catch((e) => { erro = e.message; });
 conf('login recusado vira erro claro', /AUTHENTICATIONFAILED/.test(erro), erro);

@@ -129,7 +129,7 @@ export default function CaixaEntradaPage() {
     setTestando(true);
     try {
       const r = await execSF<Linha>(SF.roboTestarCaixa);
-      if (r.ok) addToast('success', `Caixa conectada: ${r.email} (${r.mensagens} mensagens).`);
+      if (r.ok) addToast('success', r.caixas ? `Caixas conectadas: ${r.erro}.` : `Caixa conectada: ${r.email} (${r.mensagens} mensagens).`);
       else addToast('error', `Caixa não conectada: ${r.erro}`);
     } catch (e) {
       addToast('error', getMitraErrorMessage(e));
@@ -278,6 +278,7 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
   const ehImap = config.INTEGRACAO === 'imap';
   const [palavras, setPalavras] = useState(config.IMAP_PALAVRAS ?? '');
   const [senha, setSenha] = useState('');
+  const [senhaNotas, setSenhaNotas] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const corteOk = /^(100|[0-9]{1,2})$/.test(corte.trim());
@@ -291,11 +292,12 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
     setErro('');
     try {
       const semPermissao = 'Sem permissão ou valor inválido — nada foi alterado.';
-      if (senha) {
+      for (const [caixa, valor] of [['boletos', senha], ['notas', senhaNotas]]) {
+        if (!valor) continue;
         // Vai como arquivo privado: o input de uma SF fica no log, e a senha nao pode ficar la.
         const nome = `caixa-${crypto.randomUUID()}.txt`;
-        const up = await uploadFilePrivateMitra({ projectId: PROJECT_ID, file: new File([senha], nome, { type: 'text/plain' }) });
-        const r = await execSF<Linha>(SF.roboImapGuardarSenha, { key: up.result.key });
+        const up = await uploadFilePrivateMitra({ projectId: PROJECT_ID, file: new File([valor], nome, { type: 'text/plain' }) });
+        const r = await execSF<Linha>(SF.roboImapGuardarSenha, { key: up.result.key, caixa });
         if (!r.ok) throw new Error(String(r.erro ?? 'Não consegui guardar a senha.'));
       }
       for (const [chave, valor] of [['CORTE_CONFIANCA', corte.trim()], ehImap ? ['IMAP_PALAVRAS', palavras.trim()] : ['GMAIL_QUERY', busca.trim()], ['MAX_MENSAGENS', max.trim()]]) {
@@ -321,10 +323,11 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
         {ehImap ? (
           <>
             <Input label={`Senha da caixa ${config.IMAP_USUARIO ?? ''}`} type="password" autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+            <Input label={`Senha da caixa de notas ${config.IMAP_NOTAS_USUARIO ?? ''}`} type="password" autoComplete="new-password" value={senhaNotas} onChange={(e) => setSenhaNotas(e.target.value)} />
             <p className="text-[12.5px] text-fg-muted -mt-2.5">Deixe em branco para manter a atual. Fica guardada em arquivo privado do projeto e só é usada na leitura pedida por um administrador.</p>
             <div>
               <Input label="Palavras da busca (separadas por vírgula)" value={palavras} onChange={(e) => setPalavras(e.target.value)} />
-              <p className="text-[12.5px] text-fg-muted mt-1.5">Lê os e-mails dos últimos 7 dias com PDF e alguma dessas palavras no assunto ou no nome do anexo.</p>
+              <p className="text-[12.5px] text-fg-muted mt-1.5">Caixa de boletos: lê os e-mails dos últimos 7 dias com PDF e alguma dessas palavras no assunto ou no nome do anexo. Caixa de notas: lê só o XML de NF-e, sem usar as palavras.</p>
             </div>
           </>
         ) : (

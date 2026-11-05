@@ -8,3 +8,7 @@
 A leitura abre a caixa somente para consulta: não apaga, não move e não marca como lida. São lidos os e-mails dos últimos 7 dias com PDF e alguma das palavras de Ajustes no assunto ou no nome do anexo.
 
 A senha fica em arquivo privado do projeto, fora de tabelas e do registro de execuções. Quem é desenvolvedor do projeto consegue acessar esse arquivo. Para trocar, informe a nova em Ajustes; a anterior é apagada.
+
+## Caixa de notas (italo.antonio@grupolidon.com.br)
+
+Em Ajustes, preencha **Senha da caixa de notas**. Essa caixa é lida na mesma rodada, também só para consulta: entram apenas e-mails dos últimos 7 dias com XML de NF-e, sem usar as palavras. PDFs e outros XMLs são ignorados, e de um e-mail sem NF-e não se guardam remetente nem assunto. O corpo do e-mail não é guardado.

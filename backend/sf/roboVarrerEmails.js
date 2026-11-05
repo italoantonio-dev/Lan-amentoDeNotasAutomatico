@@ -6,7 +6,7 @@ if (origem === 'CRON' && config.ATIVO !== 'S') return { ok: true, ignorado: true
 
 const slug = config.INTEGRACAO || 'gmail';
 const ehImap = slug === 'imap';
-let sessao = null;
+const sessoes = {};
 const token = 'r' + Date.now() + Math.random().toString(16).slice(2, 10);
 await chamar(SF.roboCriarExecucao, { token, origem });
 const exec = await uma(SF.roboObterExecucao, { token });
@@ -40,11 +40,23 @@ try {
   // responde 200 com a caixa inteira, sem filtro. O limite sai no slice abaixo. Nao "otimize".
   if (ehImap) {
     if (origem === 'CRON') throw new Error('A caixa IMAP só é lida a pedido.');
-    sessao = await imapAbrir(await imapDados(config));
+    // Caixa sem senha fica de fora da rodada; sem nenhuma, a busca falha como "nao conectada".
+    const semSenha = [];
+    for (const caixa of ['boletos', 'notas']) {
+      try {
+        sessoes[caixa] = await imapAbrir(await imapDados(config, caixa));
+      } catch (e) {
+        if (!/IMAP_SEM_SENHA/.test(msgErro(e))) throw new Error('Caixa de ' + caixa + ': ' + msgErro(e));
+        semSenha.push(msgErro(e));
+      }
+    }
+    if (!sessoes.boletos && !sessoes.notas) throw new Error(semSenha.join(' '));
   }
   const lista = ehImap ? null : await caixa('/gmail/v1/users/me/messages', { q: consulta });
   const max = Number(config.MAX_MENSAGENS ?? 10) || 10;
-  const ids = ehImap ? await imapCandidatos(sessao, String(config.IMAP_PALAVRAS || '').split(','), 7) : (lista.messages || []).map((m) => m.id);
+  const ids = ehImap
+    ? (sessoes.notas ? await imapCandidatos(sessoes.notas, [], 7, null, true) : []).concat(sessoes.boletos ? await imapCandidatos(sessoes.boletos, String(config.IMAP_PALAVRAS || '').split(','), 7) : [])
+    : (lista.messages || []).map((m) => m.id);
   const jaLidas = new Set((ids.length ? await listar(SF.roboMensagensProcessadas, { ids: ids.join(',') }) : []).map((r) => r.MENSAGEM_ID));
   const novas = ids.filter((i) => !jaLidas.has(i)).slice(0, max);
   // Cada documento custa cerca de 26 execucoes (nota inclui a conferencia com pedidos), e chamada entre SFs conta no limite por minuto do
@@ -59,8 +71,9 @@ try {
     let anexos;
     let recebido;
     if (ehImap) {
-      const m = await imapBaixar(sessao, id);
-      cab = m.cab; anexos = m.anexos; recebido = m.recebido;
+      const m = await imapBaixar(String(id).startsWith('imapnotas:') ? sessoes.notas : sessoes.boletos, id);
+      // E-mail sem NF-e na caixa de notas: guarda so o id, para nao baixar de novo. Remetente e assunto nao interessam.
+      cab = String(id).startsWith('imapnotas:') && !m.anexos.length ? {} : m.cab; anexos = m.anexos; recebido = m.recebido;
     } else {
       const msg = await caixa('/gmail/v1/users/me/messages/' + encodeURIComponent(id));
       ((msg.payload && msg.payload.headers) || []).forEach((h) => { cab[String(h.name).toLowerCase()] = h.value; });
@@ -102,5 +115,5 @@ try {
   await concluir('ERRO', m);
   return Object.assign({ ok: false, naoConectada: /IMAP_SEM_SENHA|PREENCHER|invalid_client|invalid_grant|401|Authentication|not found|n[aã]o encontrad/i.test(m), erro: m }, cont);
 } finally {
-  if (sessao) sessao.fechar();
+  Object.values(sessoes).forEach((s) => s.fechar());
 }

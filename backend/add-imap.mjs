@@ -7,6 +7,8 @@ const seeds = [
   ['IMAP_USUARIO', 'frota@grupolidon.com.br', 'Caixa lida pelo robo'],
   ['IMAP_PALAVRAS', 'boleto,fatura,duplicata,cobranca,titulo,pagamento,vencimento', 'Palavras no assunto ou no nome do anexo'],
   ['IMAP_SEGREDO_KEY', '', 'Key do arquivo privado com a senha'],
+  ['IMAP_NOTAS_USUARIO', 'italo.antonio@grupolidon.com.br', 'Caixa de notas: so le XML de NF-e'],
+  ['IMAP_NOTAS_SEGREDO_KEY', '', 'Key do arquivo privado com a senha da caixa de notas'],
 ];
 for (const [c, v, d] of seeds) {
   if (!(await consulta(`SELECT 1 AS X FROM ROBO_CONFIG WHERE CHAVE = '${c}'`)).length) {
@@ -15,7 +17,7 @@ for (const [c, v, d] of seeds) {
 }
 await dml(`UPDATE ROBO_CONFIG SET VALOR = 'imap' WHERE CHAVE = 'INTEGRACAO'`);
 
-await sfSQL('roboLerConfig', `SELECT CHAVE, VALOR, DESCRICAO FROM ROBO_CONFIG WHERE CHAVE <> 'IMAP_SEGREDO_KEY' AND ${NONCE}`, 'Ajustes do robo em vigor');
+await sfSQL('roboLerConfig', `SELECT CHAVE, VALOR, DESCRICAO FROM ROBO_CONFIG WHERE CHAVE NOT IN ('IMAP_SEGREDO_KEY', 'IMAP_NOTAS_SEGREDO_KEY') AND ${NONCE}`, 'Ajustes do robo em vigor');
 await sfSQL(
   'roboSalvarConfig',
   `UPDATE ROBO_CONFIG SET VALOR = '{{valor}}'
@@ -26,9 +28,9 @@ await sfSQL(
      AND ${ADMIN} AND ${NONCE}`,
   'Grava um ajuste do robo (somente administrador, valor validado no proprio SQL)',
 );
-await sfSQL('roboImapSegredo', `SELECT VALOR FROM ROBO_CONFIG WHERE CHAVE = 'IMAP_SEGREDO_KEY' AND VALOR <> '' AND ${ADMIN} AND ${NONCE}`, 'Key do arquivo com a senha da caixa (somente administrador). Interna: nao usar em agente.');
-await sfSQL('roboImapGravarKey', `UPDATE ROBO_CONFIG SET VALOR = '{{key}}' WHERE CHAVE = 'IMAP_SEGREDO_KEY' AND ${ADMIN} AND ${NONCE}`, 'Grava a key do arquivo da senha (somente administrador)');
-await sfJS('roboImapGuardarSenha', ['sf/_comum.js', 'sf/roboImapGuardarSenha.js'], 'Registra o arquivo privado com a senha da caixa e apaga o anterior (somente administrador). Parametro: key.');
+await sfSQL('roboImapSegredo', `SELECT VALOR FROM ROBO_CONFIG WHERE CHAVE = CASE '{{caixa}}' WHEN 'notas' THEN 'IMAP_NOTAS_SEGREDO_KEY' ELSE 'IMAP_SEGREDO_KEY' END AND VALOR <> '' AND ${ADMIN} AND ${NONCE}`, 'Key do arquivo com a senha da caixa (somente administrador). Interna: nao usar em agente.');
+await sfSQL('roboImapGravarKey', `UPDATE ROBO_CONFIG SET VALOR = '{{key}}' WHERE CHAVE = CASE '{{caixa}}' WHEN 'notas' THEN 'IMAP_NOTAS_SEGREDO_KEY' ELSE 'IMAP_SEGREDO_KEY' END AND ${ADMIN} AND ${NONCE}`, 'Grava a key do arquivo da senha (somente administrador)');
+await sfJS('roboImapGuardarSenha', ['sf/_comum.js', 'sf/roboImapGuardarSenha.js'], 'Registra o arquivo privado com a senha da caixa e apaga o anterior (somente administrador). Parametros: key, caixa (boletos ou notas).');
 
 const MOTOR = `const leitura = (function () { ${lerSF('robo/leitura.cjs').replace('module.exports =', 'return')}\n })();`;
 const COM_MOTOR = async (...a) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', 'sf/_imap.js', ...a)).replace('/*__MOTOR__*/', () => MOTOR);

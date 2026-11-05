@@ -3,16 +3,22 @@
 const cfg = {};
 (await listar(SF.roboLerConfig, {})).forEach((r) => { cfg[r.CHAVE] = r.VALOR; });
 if (cfg.INTEGRACAO === 'imap') {
-  let s = null;
-  try {
-    const dados = await imapDados(cfg);
-    s = await imapAbrir(dados);
-    return { ok: true, email: dados.usuario, mensagens: s.total };
-  } catch (e) {
-    return { ok: false, naoConectada: /IMAP_SEM_SENHA/.test(msgErro(e)), erro: msgErro(e).replace('IMAP_SEM_SENHA: ', '') };
-  } finally {
-    if (s) s.fechar();
+  // Cada caixa responde por si: uma sem senha nao esconde o resultado da outra.
+  const conectadas = [];
+  const erros = [];
+  for (const caixa of ['boletos', 'notas']) {
+    let s = null;
+    try {
+      const dados = await imapDados(cfg, caixa);
+      s = await imapAbrir(dados);
+      conectadas.push(dados.usuario + ' (' + s.total + ' mensagens)');
+    } catch (e) {
+      erros.push(caixa + ': ' + msgErro(e).replace('IMAP_SEM_SENHA: ', ''));
+    } finally {
+      if (s) s.fechar();
+    }
   }
+  return { ok: !erros.length, caixas: conectadas, erro: conectadas.concat(erros).join('; ') };
 }
 try {
   const r = await sdk.callIntegrationMitra({ projectId: PROJECT_ID, connection: cfg.INTEGRACAO || 'gmail', method: 'GET', endpoint: '/gmail/v1/users/me/profile' });
