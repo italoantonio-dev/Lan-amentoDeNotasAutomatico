@@ -40,8 +40,7 @@ export default function Layout() {
   );
   const marca = (
     <div className="flex items-center gap-2 h-14 px-4 border-b border-border">
-      <span className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--color-primary)', color: 'var(--accent-fg)' }}><FileText size={16} /></span>
-      <span className="font-semibold text-[15px] text-fg">Mitra</span>
+      <img src="/logo-grupo-lidon.png" alt="Grupo Lidon" className="h-8 w-auto" />
     </div>
   );
 
@@ -67,7 +66,7 @@ export default function Layout() {
           <button onClick={() => setAberto((a) => !a)} aria-label="Abrir menu" className="p-2 -ml-2 rounded-lg text-fg-muted hover:bg-surface-hover">
             {aberto ? <X size={20} /> : <Menu size={20} />}
           </button>
-          <span className="font-semibold text-[15px] text-fg">Mitra</span>
+          <img src="/logo-grupo-lidon.png" alt="Grupo Lidon" className="h-7 w-auto" />
         </header>
         <main key={pathname} className="flex-1 min-w-0 pagina-entra">
           <Outlet />
