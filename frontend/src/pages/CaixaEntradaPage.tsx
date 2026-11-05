@@ -327,7 +327,7 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
             <p className="text-[12.5px] text-fg-muted -mt-2.5">Deixe em branco para manter a atual. Fica guardada em arquivo privado do projeto e só é usada na leitura pedida por um administrador.</p>
             <div>
               <Input label="Palavras da busca (separadas por vírgula)" value={palavras} onChange={(e) => setPalavras(e.target.value)} />
-              <p className="text-[12.5px] text-fg-muted mt-1.5">Caixa de boletos: lê os e-mails dos últimos 7 dias com PDF e alguma dessas palavras no assunto ou no nome do anexo. Caixa de notas: lê só o XML de NF-e, sem usar as palavras.</p>
+              <p className="text-[12.5px] text-fg-muted mt-1.5">Caixa de boletos: lê os e-mails dos últimos 7 dias com PDF e alguma dessas palavras no assunto ou no nome do anexo. Caixa de notas: lê o XML de NF-e e o PDF que tenha chave de NF-e válida, sem usar as palavras.</p>
             </div>
           </>
         ) : (

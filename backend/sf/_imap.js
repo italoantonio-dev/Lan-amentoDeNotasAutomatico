@@ -155,7 +155,7 @@ async function imapAbrir(dados, conectar) {
 }
 
 // Ids novos primeiro. O cabecalho e a estrutura bastam para filtrar sem baixar anexo.
-// Caixa de notas: so XML, sem palavra. E outra caixa, entao o id leva outro prefixo (UIDs se repetem entre caixas).
+// Caixa de notas: XML ou PDF, sem palavra. E outra caixa, entao o id leva outro prefixo (UIDs se repetem entre caixas).
 async function imapCandidatos(s, palavras, dias, agora, notas) {
   const d = new Date((agora || Date.now()) - dias * 86400000);
   const desde = d.getUTCDate() + '-' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()] + '-' + d.getUTCFullYear();
@@ -171,7 +171,7 @@ async function imapCandidatos(s, palavras, dias, agora, notas) {
     const tam = /RFC822\.SIZE (\d+)/.exec(l.texto);
     if (tam && Number(tam[1]) > 25 * 1024 * 1024) return;
     const est = imapSemAcento(l.texto);
-    if (!(notas ? /\.xml|"application" "xml"|"text" "xml"|"application" "octet-stream"/ : /\.pdf|"application" "pdf"|"application" "octet-stream"/).test(est)) return;
+    if (!(notas ? /\.xml|\.pdf|"application" "xml"|"text" "xml"|"application" "pdf"|"application" "octet-stream"/ : /\.pdf|"application" "pdf"|"application" "octet-stream"/).test(est)) return;
     const assunto = l.literais[0] ? imapCabecalhos(l.literais[0].toString('latin1')).subject || '' : '';
     const alvo = imapSemAcento(imapPalavraMime(assunto)) + ' ' + est;
     if (lista.length && !lista.some((p) => alvo.includes(p))) return;
@@ -180,8 +180,14 @@ async function imapCandidatos(s, palavras, dias, agora, notas) {
   return ids.sort((a, b) => b - a).map((u) => (notas ? 'imapnotas:' : 'imap:') + s.uidValidity + ':' + u);
 }
 
-// Na caixa de notas, XML que nao e NF-e e descartado aqui, sem chegar ao robo.
+// Na caixa de notas, XML que nao e NF-e e descartado aqui; o PDF passa pelo filtro de chave em imapSoNotas.
 const imapEhNfe = (buffer) => /<(nfeProc|NFe)[\s>]/.test(buffer.toString('utf8'));
+
+// Caixa pessoal: PDF so entra se tiver chave de NF-e valida (modulo 11, UF, mes e modelo 55/65).
+// Precisa do leitor do robo, por isso fica fora de imapBaixar.
+function imapSoNotas(anexos, ler) {
+  return anexos.filter((a) => !/\.pdf$/i.test(a.nome) || !!ler(a.nome, a.buffer).chave);
+}
 
 async function imapBaixar(s, id) {
   const notas = String(id).startsWith('imapnotas:');
@@ -195,7 +201,7 @@ async function imapBaixar(s, id) {
   return {
     cab: { from: imapPalavraMime(cab.from), subject: imapPalavraMime(cab.subject) },
     recebido: Number.isNaN(data) ? '' : new Date(data).toISOString().slice(0, 19),
-    anexos: notas ? imapAnexosPdf(bruto, [], 0, /\.xml$/i).filter((a) => imapEhNfe(a.buffer)) : imapAnexosPdf(bruto),
+    anexos: notas ? imapAnexosPdf(bruto, [], 0, /\.(xml|pdf)$/i).filter((a) => !/\.xml$/i.test(a.nome) || imapEhNfe(a.buffer)) : imapAnexosPdf(bruto),
   };
 }
 

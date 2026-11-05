@@ -72,6 +72,7 @@ try {
     let recebido;
     if (ehImap) {
       const m = await imapBaixar(String(id).startsWith('imapnotas:') ? sessoes.notas : sessoes.boletos, id);
+      if (String(id).startsWith('imapnotas:')) m.anexos = imapSoNotas(m.anexos, leitura.lerDocumento);
       // E-mail sem NF-e na caixa de notas: guarda so o id, para nao baixar de novo. Remetente e assunto nao interessam.
       cab = String(id).startsWith('imapnotas:') && !m.anexos.length ? {} : m.cab; anexos = m.anexos; recebido = m.recebido;
     } else {
