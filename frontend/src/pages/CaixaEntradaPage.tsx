@@ -130,7 +130,7 @@ export default function CaixaEntradaPage() {
     try {
       const r = await execSF<Linha>(SF.roboTestarCaixa);
       if (r.ok) addToast('success', r.caixas ? `Caixas conectadas: ${r.erro}.` : `Caixa conectada: ${r.email} (${r.mensagens} mensagens).`);
-      else addToast('error', `Caixa não conectada: ${r.erro}`);
+      else addToast('error', r.caixas?.length ? `Conectadas: ${r.erro}` : `Caixa não conectada: ${r.erro}`);
     } catch (e) {
       addToast('error', getMitraErrorMessage(e));
     } finally {

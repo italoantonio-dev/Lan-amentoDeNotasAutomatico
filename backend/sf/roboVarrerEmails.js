@@ -7,6 +7,7 @@ if (origem === 'CRON' && config.ATIVO !== 'S') return { ok: true, ignorado: true
 const slug = config.INTEGRACAO || 'gmail';
 const ehImap = slug === 'imap';
 const sessoes = {};
+const caixasFora = []; // caixa que nao abriu nao derruba a outra: a rodada sai PARCIAL com o motivo
 const token = 'r' + Date.now() + Math.random().toString(16).slice(2, 10);
 await chamar(SF.roboCriarExecucao, { token, origem });
 const exec = await uma(SF.roboObterExecucao, { token });
@@ -46,11 +47,11 @@ try {
       try {
         sessoes[caixa] = await imapAbrir(await imapDados(config, caixa));
       } catch (e) {
-        if (!/IMAP_SEM_SENHA/.test(msgErro(e))) throw new Error('Caixa de ' + caixa + ': ' + msgErro(e));
-        semSenha.push(msgErro(e));
+        if (/IMAP_SEM_SENHA/.test(msgErro(e))) semSenha.push(msgErro(e));
+        else caixasFora.push('caixa de ' + caixa + ' não lida: ' + msgErro(e));
       }
     }
-    if (!sessoes.boletos && !sessoes.notas) throw new Error(semSenha.join(' '));
+    if (!sessoes.boletos && !sessoes.notas) throw new Error(caixasFora.concat(semSenha).join(' '));
   }
   const lista = ehImap ? null : await caixa('/gmail/v1/users/me/messages', { q: consulta });
   const max = Number(config.MAX_MENSAGENS ?? 10) || 10;
@@ -109,7 +110,7 @@ try {
     if (limite) { parouPorTeto = true; break; }
     if (email) await chamar(SF.roboConcluirEmail, { id: email.ID });
   }
-  await concluir(cont.erros || parouPorTeto ? 'PARCIAL' : 'OK', parouPorTeto ? 'Rodada interrompida para não estourar o limite do projeto: clique em Buscar agora de novo para continuar.' : novas.length ? 'Rodada concluída.' : 'Nenhuma mensagem nova na busca.');
+  await concluir(cont.erros || parouPorTeto || caixasFora.length ? 'PARCIAL' : 'OK', (caixasFora.length ? caixasFora.join('; ') + '. ' : '') + (parouPorTeto ? 'Rodada interrompida para não estourar o limite do projeto: clique em Buscar agora de novo para continuar.' : novas.length ? 'Rodada concluída.' : 'Nenhuma mensagem nova na busca.'));
   return Object.assign({ ok: true, parcial: parouPorTeto }, cont);
 } catch (e) {
   const m = msgErro(e);
