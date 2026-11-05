@@ -277,7 +277,9 @@ function lerTexto(texto) {
   else if (/FOLHA\s+DE\s+PAGAMENTO|HOLERITE|RECIBO\s+DE\s+PAGAMENTO/i.test(normal)) tipoProvavel = 'FOLHA_PAGAMENTO';
 
   const emitente = daChave.cnpjEmitente || '';
-  const nomeRotulado = /(?:EMITENTE|RAZAO\s+SOCIAL|BENEFICIARIO|CEDENTE)[:\s]+([A-Z0-9][^\n]{2,80})/i.exec(normal);
+  // Na NFS-e "EMITENTE DA NFS-e" e rotulo, nao nome: o prestador e o primeiro "Nome / Nome Empresarial".
+  const nomeNfse = chaveNfse ? /NOME\s*\/\s*NOME\s+EMPRESARIAL\s+([A-Z0-9][^\n]{2,120}?)(?=\s+(?:MUNICIPIO|ENDERECO|E-\s?MAIL|TELEFONE)\b|\n|$)/i.exec(normal) : null;
+  const nomeRotulado = nomeNfse || /(?:EMITENTE|RAZAO\s+SOCIAL|BENEFICIARIO|CEDENTE)(?!\s+DA\s+NFS)[:\s]+([A-Z0-9][^\n]{2,80})/i.exec(normal);
   return {
     formato: 'PDF',
     texto,
