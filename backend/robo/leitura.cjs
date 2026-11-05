@@ -61,6 +61,8 @@ function lerXml(texto) {
     return {
       descricao: valorTag(prod, 'xProd').slice(0, 300), quantidade: Number(valorTag(prod, 'qCom')) || 1, valorUnitario: Number(valorTag(prod, 'vUnCom')) || Number(valorTag(prod, 'vProd')) || 0, codprod: 0,
       nItem: nItem ? Number(nItem) : null, cProd: valorTag(prod, 'cProd').slice(0, 60), cEAN: valorTag(prod, 'cEAN').slice(0, 20), unidade: valorTag(prod, 'uCom').slice(0, 10), valorTotal: Number(valorTag(prod, 'vProd')) || 0,
+      // Referencia ao pedido informada pelo fornecedor (opcional na NF-e) e desconto do item.
+      xPed: valorTag(prod, 'xPed').slice(0, 15), nItemPed: valorTag(prod, 'nItemPed').slice(0, 6), valorDesconto: Number(valorTag(prod, 'vDesc')) || 0,
     };
   });
   const emissao = (valorTag(ide, 'dhEmi') || valorTag(ide, 'dEmi')).slice(0, 10);

@@ -50,10 +50,11 @@ export async function carregarHistorico({ deNotas = '2025-11-01', ateNotas = '20
   const xmlCab = await mensal(deNotas, ateNotas, (de, ate) => `SELECT I.NUARQUIVO, I.NUNOTA, I.CNPJPARC, I.CNPJDEST, I.CHAVEACESSO, I.NUMNOTA, I.STATUS
     FROM TGFIXN I JOIN TGFCAB C ON C.NUNOTA = I.NUNOTA WHERE C.${fNota} AND ${entre('C.DTNEG', de, ate)}`, { objetivo: 'XML recebido das notas do piloto (cabecalho)', origem: 'TGFIXN', filtros: `nota com CODTIPOPER IN (${TOPS_NOTA})` });
 
-  const xmlItens = await mensal(deNotas, ateNotas, (de, ate) => `SELECT I.NUARQUIVO, I.NUNOTA, X.NITEM, X.CPROD, X.CEAN, SUBSTR(X.XPROD, 1, 60) AS XPROD, X.QCOM, X.UCOM, X.VUNCOM, X.VPROD
+  const xmlItens = await mensal(deNotas, ateNotas, (de, ate) => `SELECT I.NUARQUIVO, I.NUNOTA, X.NITEM, X.CPROD, X.CEAN, SUBSTR(X.XPROD, 1, 60) AS XPROD, X.QCOM, X.UCOM, X.VUNCOM, X.VPROD, X.XPED, X.NITEMPED, X.VDESC
     FROM TGFIXN I JOIN TGFCAB C ON C.NUNOTA = I.NUNOTA,
     XMLTABLE('/nfeProc/NFe/infNFe/det' PASSING XMLTYPE(I.XML) COLUMNS NITEM VARCHAR2(5) PATH '@nItem', CPROD VARCHAR2(60) PATH 'prod/cProd', CEAN VARCHAR2(20) PATH 'prod/cEAN',
-      XPROD VARCHAR2(200) PATH 'prod/xProd', QCOM VARCHAR2(30) PATH 'prod/qCom', UCOM VARCHAR2(10) PATH 'prod/uCom', VUNCOM VARCHAR2(30) PATH 'prod/vUnCom', VPROD VARCHAR2(30) PATH 'prod/vProd') X
+      XPROD VARCHAR2(200) PATH 'prod/xProd', QCOM VARCHAR2(30) PATH 'prod/qCom', UCOM VARCHAR2(10) PATH 'prod/uCom', VUNCOM VARCHAR2(30) PATH 'prod/vUnCom', VPROD VARCHAR2(30) PATH 'prod/vProd',
+      XPED VARCHAR2(30) PATH 'prod/xPed', NITEMPED VARCHAR2(10) PATH 'prod/nItemPed', VDESC VARCHAR2(30) PATH 'prod/vDesc') X
     WHERE C.${fNota} AND ${entre('C.DTNEG', de, ate)}`, { objetivo: 'Itens do XML recebido (NF-e real)', origem: 'TGFIXN.XML via XMLTABLE', filtros: `nota com CODTIPOPER IN (${TOPS_NOTA})` });
 
   const notaItens = await mensal(deNotas, ateNotas, (de, ate) => `SELECT I.NUNOTA, I.SEQUENCIA, I.CODPROD, I.QTDNEG, I.VLRUNIT, I.CODVOL

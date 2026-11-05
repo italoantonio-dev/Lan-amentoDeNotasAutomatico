@@ -37,28 +37,10 @@ try {
     console.log('AVISO base sem CNPJ repetido entre fornecedores: ambiguidade nao exercitada.');
   }
 
-  // Duplicidade: documento que ja existe no ERP, lido do proprio ERP.
-  const ref = await erp(`SELECT * FROM (SELECT F.CODEMP, F.CODPARC, F.NUMNOTA, P.CGC_CPF, F.NUFIN FROM TGFFIN F JOIN TGFPAR P ON P.CODPARC = F.CODPARC WHERE F.CODEMP = ${e.CODEMP} AND F.RECDESP = -1 AND F.NUMNOTA > 0 AND LENGTH(P.CGC_CPF) = 14 AND P.FORNECEDOR = 'S' AND P.ATIVO = 'S' ORDER BY F.DTNEG DESC) WHERE ROWNUM = 1`);
-  let alvo = ref[0];
-  let empresaAlvo = e;
-  if (!alvo) {
-    const qualquer = await erp(`SELECT * FROM (SELECT F.CODEMP, F.CODPARC, F.NUMNOTA, P.CGC_CPF, F.NUFIN FROM TGFFIN F JOIN TGFPAR P ON P.CODPARC = F.CODPARC WHERE F.RECDESP = -1 AND F.NUMNOTA > 0 AND LENGTH(P.CGC_CPF) = 14 AND P.FORNECEDOR = 'S' AND P.ATIVO = 'S' ORDER BY F.DTNEG DESC) WHERE ROWNUM = 1`);
-    alvo = qualquer[0];
-    empresaAlvo = alvo ? (await consulta(`SELECT ID, CODEMP FROM EMPRESAS WHERE CODEMP = ${Number(alvo.CODEMP)}`))[0] : null;
-  }
-  if (alvo && empresaAlvo) {
-    // Empresa real porque a duplicidade e por CODEMP; o tipo de teste mantem a linha fora dos parametros reais.
-    const tTeste = iso.tipoFinanceiro;
-    await ex('salvarParametro', { empresaId: empresaAlvo.ID, tipoId: tTeste.ID, topId: top.ID, naturezaId: nat.ID, centroId: cen.ID, contaId: cta.ID, limite: 100000000, destino: 'FINANCEIRO', codTipTit: tit.CODTIPTIT, codProdPadrao: 0 });
-    const h = (await import('node:crypto')).randomBytes(32).toString('hex');
-    const c = await ex('criarLancamentoViaChat', { origem: 'TELA', empresaId: empresaAlvo.ID, tipoId: tTeste.ID, hash: h, arquivoNome: 'smoke.pdf', cnpj: alvo.CGC_CPF, nome: 'Duplicado', numeroDoc: String(alvo.NUMNOTA), valorTotal: 10, dataEmissao: '2026-01-10', dataVencimento: '2026-02-10' });
-    criados.push(c.lancamentoId);
-    let r = await ex('enviarLancamentoParaErp', { lancamentoId: c.lancamentoId, simular: 'S' });
-    if (r.escolhaParceiro) r = await ex('enviarLancamentoParaErp', { lancamentoId: c.lancamentoId, simular: 'S', codparc: alvo.CODPARC });
-    conf('documento que ja existe no ERP e barrado citando a chave', r.ok === false && r.motivo === 'DUPLICADO_ERP' && /NUFIN/.test(r.mensagem), r.mensagem);
-  } else {
-    console.log('AVISO nenhum titulo de referencia: duplicidade no ERP nao exercitada.');
-  }
+  // Duplicidade contra o ERP: exige lancamento em empresa real (a checagem e por CODEMP), o que os
+  // testes nao fazem mais. Coberta sem rede em _smoke-bloqueio-erp.mjs (B9), com o codigo publicado
+  // identico ao testado (parte C).
+  console.log('INFO duplicidade no ERP coberta em _smoke-bloqueio-erp.mjs (B9), sem lancamento em empresa real.');
 } finally {
   for (const id of criados) await limparLancamento(id);
   await iso.fechar();

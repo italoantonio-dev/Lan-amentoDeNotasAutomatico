@@ -42,6 +42,15 @@ function saldo(it) {
   return { negociada, entregue, pendente };
 }
 
+// Referencia ao pedido escrita pelo fornecedor no XML (xPed/nItemPed). E texto livre: aceita so
+// numero e so aparece para a pessoa: no historico quase nunca e o numero do pedido no Sankhya, entao
+// nao escolhe pedido nem rebaixa a classificacao.
+function referenciaDoItem(itemDoc) {
+  const ped = String(itemDoc.xPed == null ? '' : itemDoc.xPed).replace(/\D/g, '').replace(/^0+/, '');
+  const item = String(itemDoc.nItemPed == null ? '' : itemDoc.nItemPed).replace(/\D/g, '').replace(/^0+/, '');
+  return { pedido: ped, item };
+}
+
 function compararLinha(itemDoc, pedido, it) {
   const s = saldo(it);
   const qtdDocumento = num(itemDoc.quantidade);
@@ -54,6 +63,11 @@ function compararLinha(itemDoc, pedido, it) {
   if (!mesmaUnidade) divergencias.push('UNIDADE_DIFERENTE');
   if (mesmaUnidade && qtdDocumento > s.pendente + ARRED) divergencias.push('QUANTIDADE_ACIMA_DO_PENDENTE');
   if (!igual(precoDocumento, precoPedido)) divergencias.push('PRECO_DIFERENTE');
+  // Desconto do item na NF-e: mostrado com o preco liquido; nao muda a comparacao (sem regra aprovada).
+  const desconto = num(itemDoc.valorDesconto);
+  const precoLiquido = qtdDocumento ? arred((num(itemDoc.valorTotal) || precoDocumento * qtdDocumento) / qtdDocumento - desconto / qtdDocumento, 6) : precoDocumento;
+  const ref = referenciaDoItem(itemDoc);
+  const referenciaConfere = ref.pedido ? (String(ref.pedido) === String(num(pedido.NUNOTA)) || String(ref.pedido) === String(num(pedido.NUMNOTA))) && (!ref.item || num(ref.item) === num(it.SEQUENCIA)) : null;
   return {
     pedido: num(pedido.NUNOTA), numeroPedido: pedido.NUMNOTA ?? null, sequencia: num(it.SEQUENCIA), codprod: num(it.CODPROD), descricao: it.DESCRPROD || '',
     negociada: s.negociada, entregue: s.entregue, pendente: s.pendente, quantidadeDocumento: qtdDocumento,
@@ -61,6 +75,9 @@ function compararLinha(itemDoc, pedido, it) {
     unidadePedido, unidadeDocumento, precoPedido, precoDocumento,
     diferencaPreco: arred(precoDocumento - precoPedido, 6),
     diferencaPrecoPct: precoPedido ? arred(((precoDocumento - precoPedido) / precoPedido) * 100, 4) : null,
+    descontoDocumento: desconto, precoLiquidoDocumento: precoLiquido,
+    valorPedido: mesmaUnidade ? arred(precoPedido * qtdDocumento, 2) : null, valorDocumento: arred(num(itemDoc.valorTotal) || precoDocumento * qtdDocumento, 2),
+    referenciaConfere,
     divergencias,
   };
 }
@@ -79,7 +96,7 @@ function conferir(entrada) {
   const pedidos = entrada.pedidos || [];
   const alertas = [];
   const resultado = {
-    versao: 1, somenteLeitura: true, situacao: '', resumo: '',
+    versao: 2, somenteLeitura: true, situacao: '', resumo: '',
     documento: { chave: doc.chave || '', numero: doc.numero || '', serie: doc.serie || '', dataEmissao: doc.dataEmissao || '', cnpjEmitente: doc.cnpjEmitente || '', cnpjDestinatario: doc.cnpjDestinatario || '', valorTotal: num(doc.valorTotal), itens: (doc.itens || []).length },
     empresas: empresas.map((e) => ({ CODEMP: num(e.CODEMP), NOME: e.NOME || '' })),
     parceiros: parceiros.map((p) => ({ CODPARC: num(p.CODPARC), NOME: p.RAZAOSOCIAL || p.NOMEPARC || '', FORNECEDOR: p.FORNECEDOR || '' })),
@@ -94,12 +111,12 @@ function conferir(entrada) {
   if (!empresas.length) {
     resultado.situacao = 'SEM_EMPRESA';
     resultado.resumo = 'O CNPJ do destinatário não corresponde a nenhuma empresa cadastrada.';
-    return resultado;
+    return classificar(resultado);
   }
   if (!parceiros.length) {
     resultado.situacao = 'SEM_FORNECEDOR';
     resultado.resumo = 'Nenhum parceiro ativo no ERP com o CNPJ do emitente.';
-    return resultado;
+    return classificar(resultado);
   }
 
   const daEmpresa = pedidos.filter((p) => codemps.includes(num(p.CODEMP)) && codparcs.includes(num(p.CODPARC)));
@@ -135,6 +152,8 @@ function conferir(entrada) {
       quantidade: num(itemDoc.quantidade), unidade: codigo(itemDoc.unidade), valorUnitario: num(itemDoc.valorUnitario), valorTotal: num(itemDoc.valorTotal),
       identificacao: ident, situacao, pedidos: pedidosDoItem, linhas, linhasSugeridas,
       saldoSuficienteEm: pedidosDoItem.filter((_, i) => pendenteNoPedido[i] + ARRED >= num(itemDoc.quantidade)),
+      referenciaPedido: referenciaDoItem(itemDoc).pedido ? { pedido: referenciaDoItem(itemDoc).pedido, item: referenciaDoItem(itemDoc).item, confereCom: unicos(linhas.filter((l) => l.referenciaConfere).map((l) => l.pedido)) } : null,
+      descontoDocumento: num(itemDoc.valorDesconto),
       pendenteEmOutraEmpresa: emOutraEmpresa,
     });
     if (situacao === 'SEM_PEDIDO' && emOutraEmpresa.length) alertas.push({ tipo: 'PEDIDO_EM_OUTRA_EMPRESA', mensagem: 'Item ' + (itemDoc.nItem ?? '') + ': há saldo deste produto em pedido do fornecedor para outra empresa (' + emOutraEmpresa.join(', ') + ').' });
@@ -190,7 +209,54 @@ function conferir(entrada) {
     MULTIPLOS_PEDIDOS: 'Cada item corresponde a um único pedido, em ' + pedidosUnicos.length + ' pedidos.',
   };
   resultado.resumo = textos[resultado.situacao] + (divergentes ? ' ' + divergentes + ' item(ns) com divergência.' : '');
+  classificar(resultado);
   return resultado;
 }
 
-module.exports = { conferir, identificarProduto, saldo, codigo, ARRED };
+// Classificacao final, sem tolerancia: SEGURA so quando o pedido de cada item e unico e nada diverge.
+// Qualquer duvida vira AMBIGUA (pessoa escolhe), qualquer diferenca vira INCOMPATIVEL (pessoa confere),
+// e SEM_PEDIDO quando nao ha saldo em pedido para os produtos identificados.
+const PEDE_PESSOA = {
+  ESCOLHER_PEDIDO: 'Escolher o pedido de cada item com mais de um candidato',
+  RATEAR_ENTRE_PEDIDOS: 'Dividir a quantidade entre pedidos: nenhum tem saldo sozinho',
+  IDENTIFICAR_PRODUTO: 'Informar o produto do ERP dos itens sem de-para',
+  CONFERIR_PRECO: 'Conferir o preço: difere do pedido (não há tolerância aprovada)',
+  CONFERIR_QUANTIDADE: 'Conferir a quantidade: passa do saldo pendente',
+  CONFERIR_UNIDADE: 'Conferir a unidade: difere do pedido (equivalência não aprovada)',
+  CONFERIR_DUPLICIDADE: 'A nota já aparece no ERP: conferir antes de qualquer lançamento',
+  ITENS_SEM_PEDIDO: 'Decidir os itens sem pedido',
+  CADASTRO: 'Conferir empresa, fornecedor ou itens do documento',
+  PRODUTO_AMBIGUO: 'O código do fornecedor aponta para mais de um produto',
+};
+function classificar(r) {
+  const motivos = new Set();
+  const temAlerta = (t) => r.alertas.some((a) => a.tipo === t);
+  if (['SEM_EMPRESA', 'SEM_FORNECEDOR', 'SEM_ITENS'].includes(r.situacao)) motivos.add('CADASTRO');
+  if (temAlerta('JA_EXISTE_NO_ERP')) motivos.add('CONFERIR_DUPLICIDADE');
+  if (temAlerta('PRODUTO_AMBIGUO')) motivos.add('PRODUTO_AMBIGUO');
+  for (const i of r.itens) {
+    if (i.situacao === 'PRODUTO_NAO_IDENTIFICADO') motivos.add('IDENTIFICAR_PRODUTO');
+    if (i.situacao === 'AMBIGUO') motivos.add(i.saldoSuficienteEm.length ? 'ESCOLHER_PEDIDO' : 'RATEAR_ENTRE_PEDIDOS');
+    if (i.situacao === 'SEM_PEDIDO' && r.situacao !== 'SEM_PEDIDO') motivos.add('ITENS_SEM_PEDIDO');
+    if (i.situacao === 'PEDIDO_UNICO') {
+      const ds = i.linhas.flatMap((l) => l.divergencias);
+      if (ds.includes('PRECO_DIFERENTE')) motivos.add('CONFERIR_PRECO');
+      if (ds.includes('QUANTIDADE_ACIMA_DO_PENDENTE') || !i.saldoSuficienteEm.length) motivos.add('CONFERIR_QUANTIDADE');
+      if (ds.includes('UNIDADE_DIFERENTE')) motivos.add('CONFERIR_UNIDADE');
+    }
+  }
+  let c;
+  if (r.situacao === 'SEM_PEDIDO') c = 'SEM_PEDIDO';
+  else if (motivos.has('ESCOLHER_PEDIDO') || motivos.has('RATEAR_ENTRE_PEDIDOS') || motivos.has('PRODUTO_AMBIGUO')) c = 'AMBIGUA';
+  else if (motivos.size) c = 'INCOMPATIVEL';
+  else c = 'SEGURA';
+  r.classificacao = c;
+  r.intervencaoHumana = [...motivos].map((m) => ({ codigo: m, texto: PEDE_PESSOA[m] }));
+  r.justificativa = c === 'SEGURA'
+    ? 'Cada item tem um único pedido com saldo, preço, quantidade e unidade iguais, e a nota não aparece no ERP.'
+    : c === 'SEM_PEDIDO' ? 'Nenhum produto identificado tem saldo em pedido deste fornecedor para esta empresa.'
+      : 'Exige intervenção: ' + r.intervencaoHumana.map((x) => x.texto.toLowerCase()).join('; ') + '.';
+  return r;
+}
+
+module.exports = { conferir, classificar, identificarProduto, saldo, codigo, ARRED };

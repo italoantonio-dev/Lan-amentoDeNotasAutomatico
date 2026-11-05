@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { montarJS, carregarSFs, DIR_BACKEND } from './lib/base.mjs';
-import { conf, encerrar, totalFalhas, sdk, projectId, consulta, ex, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
+import { conf, encerrar, totalFalhas, sdk, projectId, consulta, ex, cnpjFicticio, criarLancamentoTeste, limparLancamento, abrirIsolamento } from './lib/smoke.mjs';
 import { JS_COM_ERP, SQL_ALTERADAS, codigoEsperado } from './fase0/funcoes.mjs';
 import { ler as lerErp } from './auditoria/leitura.mjs';
 
@@ -90,7 +90,8 @@ function ambiente(respostas = {}) {
     callIntegrationMitra: async (o) => {
       a.rede.push(o);
       if (o.connection !== 'sankhya') return respostas.__caixa ? respostas.__caixa(o) : { statusCode: 200, body: {} };
-      if (o.body && o.body.serviceName === LEITURA) return linhasErp(o.body.requestBody.sql);
+      if (respostas.__falhaRede) throw new Error('ECONNRESET: conexão com o ERP caiu');
+      if (o.body && o.body.serviceName === LEITURA) return (respostas.__erp && respostas.__erp(o.body.requestBody.sql)) || linhasErp(o.body.requestBody.sql);
       return { statusCode: 200, body: { status: '1', responseBody: { entities: { entity: { NUFIN: { $: '999' }, NUNOTA: { $: '999' }, CODPARC: { $: '999' } } } } } };
     },
     executeServerFunctionMitra: async ({ serverFunctionId, input }) => {
@@ -344,6 +345,37 @@ const so = (a) => a.sfs.every((x) => SF_LEITURA_CONFERENCIA.includes(x.nome));
   conf('conferencia nao grava nem com as duas travas ligadas em memoria', r.ok === true && a.gravacoes().length === 0);
 }
 
+// B9. Falha de conexao, duplicidade e classificacao, sem rede
+const erpCom = (re, colunas, dados) => (sql) => (re.test(sql) ? { statusCode: 200, body: { status: '1', responseBody: { fieldsMetadata: colunas.map((name) => ({ name })), rows: dados } } } : null);
+{
+  const a = ambiente({ ...respConferencia(), __falhaRede: true });
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('B9 falha de conexao na conferencia: erro claro, sem resultado parcial', r.ok === false && /consultar o ERP/.test(r.erro) && !r.resultado, r.erro);
+  const b = ambiente({ ...respostasEnvio(), __falhaRede: true });
+  const s2 = await b.rodar(codEnviar, { lancamentoId: 1, simular: 'S' });
+  conf('B9 falha de conexao no envio: recusa, sem afirmar que esta livre', s2.ok === false && b.gravacoes().length === 0, s2.motivo);
+}
+{
+  const a = ambiente({ ...respConferencia(), __erp: erpCom(/MOTIVO/, ['NUNOTA', 'NUMNOTA', 'SERIENOTA', 'CODTIPOPER', 'STATUSNOTA', 'MOTIVO'], [[777, 1, '1', 1419, 'L', 'CHAVE']]) });
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('B9 conferencia de nota ja lancada: INCOMPATIVEL com a nota existente', r.ok === true && r.resultado.classificacao === 'INCOMPATIVEL' && r.resultado.duplicidade[0].NUNOTA === 777 && a.gravacoes().length === 0, r.resultado?.classificacao);
+}
+{
+  const a = ambiente(respConferencia());
+  const r = await a.rodar(codConferir, { nome: 'n.xml', conteudoB64: Buffer.from(xmlNfe([{ c: 'ABC-1' }])).toString('base64') });
+  conf('B9 conferencia devolve classificacao e justificativa', ['SEGURA', 'INCOMPATIVEL'].includes(r.resultado.classificacao) && Boolean(r.resultado.justificativa) && Array.isArray(r.resultado.intervencaoHumana), r.resultado.classificacao);
+}
+{
+  const a = ambiente({ ...respostasEnvio(), __erp: erpCom(/AS CHAVE FROM/, ['CHAVE'], [['12345']]) });
+  const r = await a.rodar(codEnviar, { lancamentoId: 1, simular: 'S' });
+  conf('B9 titulo ja existente no ERP e barrado antes de montar', r.ok === false && r.motivo === 'DUPLICADO_ERP' && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente(respostasEnvio({ DESTINO_ERP: 'NOTA' }));
+  const r = await a.rodar(codEnviar, { lancamentoId: 1 });
+  conf('B9 tentativa de gravacao de nota: bloqueada, sem chamada de escrita', r.ok === false && r.motivo === 'GRAVACAO_BLOQUEADA' && a.gravacoes().length === 0, r.motivo);
+}
+
 // ---------------------------------------------------------------- C. Publicado
 console.log('\n--- C. Publicado ---');
 const lista = (await sdk.listServerFunctionsMitra({ projectId })).result;
@@ -394,6 +426,7 @@ if (VIVO && totalFalhas()) {
   console.log('\n--- D. Vivo (SFs publicadas, CNPJ ficticio) ---');
   const contar = async () => Number((await consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'))[0].N);
   const antes = await contar();
+  const iso = await abrirIsolamento();
   const l = await criarLancamentoTeste({ cnpj: cnpjFicticio(), tipoCodigo: 'BOLETO', valor: 1.23 });
   try {
     const real = await ex('enviarLancamentoParaErp', { lancamentoId: l.lancamentoId });
@@ -439,8 +472,10 @@ if (VIVO && totalFalhas()) {
     conf('conferencia nao grava neste sistema nem no registro de envios', (await contarLocais()) === locaisAntes);
   } finally {
     await limparLancamento(l.lancamentoId);
+    await iso.fechar();
   }
 } else {
   console.log('\nINFO parte D nao executada: rode com --vivo depois de publicar.');
 }
 encerrar('Bloqueio de gravacao no ERP');
+
