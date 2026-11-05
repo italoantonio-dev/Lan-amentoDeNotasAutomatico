@@ -34,4 +34,5 @@
 | MD-1/2b | Próximos incrementos: trilha de conferência, fila de revisão, operação assistida | ⏳ pending | depois da revisão |
 | MD-P1 | Matriz de parâmetros e testes isolados | ✅ aguarda aprovação; carga não autorizada | parametros/revisao-parametros.md |
 | MD-P2 | Aprovação fail-closed, vínculo pelo login, matriz por operação, testes estáveis | ✅ aguarda revisão | parametros/seguranca-aprovacoes.md |
+| MD-1/2c | Classificação do motor, validação retrospectiva, tela e isolamento dos testes | ✅ aguarda revisão | modulo-documental/validacao-classificacao.md, parametros/seguranca-contas.md |
 | MD-3/4/5 | Faturamento, piloto e expansão | ⛔ não autorizadas | — |
