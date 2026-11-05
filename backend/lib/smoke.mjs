@@ -18,6 +18,7 @@ async function esperarJanela(e) {
 }
 
 export async function ex(nome, input = {}) {
+  await barrarParametroReal(nome, input);
   const mapa = await carregarSFs();
   const id = mapa.get(nome);
   if (!id) throw new Error(`SF ${nome} nao existe`);
@@ -58,6 +59,75 @@ export function cnpjFicticio() {
   const d1 = dv(base, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   const d2 = dv([...base, d1], [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   return [...base, d1, d2].join('');
+}
+
+// Isolamento de parametros: smoke so grava parametro na empresa ou no tipo de teste. A chave do
+// parametro e (empresa, tipo), entao nenhuma linha real e tocada, nem durante a execucao.
+export const EMPRESA_TESTE = { CODEMP: 999901, NOME: 'ZZ TESTE AUTOMATIZADO - NAO USAR', CNPJ: '09999999000191' };
+export const TIPO_TESTE = { CODIGO: 'ZZ_TESTE_FIN', DESCRICAO: 'ZZ Teste automatizado - nao usar' };
+let isolado = null;
+
+export async function barrarParametroReal(nome, input) {
+  if (nome !== 'salvarParametro' && nome !== 'excluirParametro') return;
+  if (!isolado) throw new Error(`${nome} recusado: smoke sem isolamento nao grava parametro.`);
+  let { empresaId, tipoId } = input;
+  if (nome === 'excluirParametro') {
+    const p = (await consulta(`SELECT EMPRESA_ID, TIPO_DOCUMENTO_ID FROM PARAMETROS_LANCAMENTO WHERE ID = ${Number(input.id)}`))[0];
+    if (!p) return;
+    empresaId = p.EMPRESA_ID; tipoId = p.TIPO_DOCUMENTO_ID;
+  }
+  if (Number(empresaId) !== isolado.empresa.ID && Number(tipoId) !== isolado.tipoFinanceiro.ID) {
+    throw new Error(`${nome} recusado: empresa ${empresaId} e tipo ${tipoId} sao reais.`);
+  }
+}
+
+const idsTeste = async () => ({
+  emp: (await consulta(`SELECT ID FROM EMPRESAS WHERE CODEMP = ${EMPRESA_TESTE.CODEMP}`))[0]?.ID ?? 0,
+  tip: (await consulta(`SELECT ID FROM TIPOS_DOCUMENTO WHERE CODIGO = '${TIPO_TESTE.CODIGO}'`))[0]?.ID ?? 0,
+});
+
+// Tambem apaga restos de uma rodada interrompida.
+export async function removerDadosTeste() {
+  const { emp, tip } = await idsTeste();
+  if (!emp && !tip) return;
+  await dml(`DELETE FROM PARAMETROS_LANCAMENTO WHERE EMPRESA_ID = ${emp} OR TIPO_DOCUMENTO_ID = ${tip}`);
+  await dml(`DELETE FROM DOCUMENTOS WHERE EMPRESA_ID = ${emp} OR TIPO_DOCUMENTO_ID = ${tip}`);
+  if (emp) await dml(`DELETE FROM EMPRESAS WHERE ID = ${emp}`);
+  if (tip) await dml(`DELETE FROM TIPOS_DOCUMENTO WHERE ID = ${tip}`);
+}
+
+// O que os smokes nao podem mudar. Compara o conteudo inteiro, inclusive CRIADO_EM.
+async function fotografarReais() {
+  const { emp, tip } = await idsTeste();
+  const [parametros, aprovadores, config, envios] = await Promise.all([
+    consulta(`SELECT * FROM PARAMETROS_LANCAMENTO WHERE EMPRESA_ID <> ${emp} AND TIPO_DOCUMENTO_ID <> ${tip} ORDER BY ID`),
+    consulta('SELECT * FROM APROVADORES ORDER BY ID'),
+    consulta('SELECT CHAVE, VALOR FROM ROBO_CONFIG ORDER BY CHAVE'),
+    consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'),
+  ]);
+  return JSON.stringify({ parametros, aprovadores, config, envios });
+}
+
+export async function abrirIsolamento() {
+  await removerDadosTeste();
+  const foto = await fotografarReais();
+  await dml(`INSERT INTO EMPRESAS (CODEMP, NOME, CNPJ, ATIVO, CRIADO_EM) VALUES (${EMPRESA_TESTE.CODEMP}, '${EMPRESA_TESTE.NOME}', '${EMPRESA_TESTE.CNPJ}', TRUE, DATE_FORMAT(NOW(), '%Y-%m-%dT%H:%i:%s'))`);
+  await dml(`INSERT INTO TIPOS_DOCUMENTO (CODIGO, DESCRICAO, DESTINO_PADRAO, TIPMOV_ESPERADO) VALUES ('${TIPO_TESTE.CODIGO}', '${TIPO_TESTE.DESCRICAO}', 'FINANCEIRO', 'I')`);
+  const { emp, tip } = await idsTeste();
+  isolado = {
+    empresa: { ID: emp, ...EMPRESA_TESTE },
+    tipoFinanceiro: { ID: tip, CODIGO: TIPO_TESTE.CODIGO, TIPMOV_ESPERADO: 'I', DESTINO_PADRAO: 'FINANCEIRO' },
+  };
+  return {
+    ...isolado,
+    async fechar() {
+      isolado = null;
+      await removerDadosTeste();
+      const { emp: e2, tip: t2 } = await idsTeste();
+      conf('nenhum dado de teste ficou para tras', !e2 && !t2);
+      conf('parametros, aprovadores, configuracao e envios reais iguais ao inicio', (await fotografarReais()) === foto);
+    },
+  };
 }
 
 export async function primeiraEmpresa() {
@@ -103,8 +173,8 @@ export async function comPerfilTemporario(fn) {
 }
 
 export async function criarLancamentoTeste(extra = {}) {
-  const e = await primeiraEmpresa();
-  const t = await tipo(extra.tipoCodigo ?? 'BOLETO');
+  const e = extra.empresa ?? await primeiraEmpresa();
+  const t = extra.tipo ?? await tipo(extra.tipoCodigo ?? 'BOLETO');
   const h = hash();
   const r = await ex('criarLancamentoViaChat', {
     empresaId: e.ID, tipoId: t.ID, hash: h, arquivoNome: 'smoke.pdf', cnpj: extra.cnpj ?? cnpjFicticio(), nome: extra.nome ?? 'Fornecedor Smoke', numeroDoc: extra.numeroDoc ?? String(Date.now()).slice(-8), serie: '1',

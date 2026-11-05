@@ -1,16 +1,16 @@
 // Gravacao de titulo. Por padrao NAO grava: exercita todas as guardas ate a montagem do pedido (simular).
 // Gravar de verdade no ERP e irreversivel e so roda com --gravar-de-verdade, contra uma base de homologacao.
-import { ex, rows, uma, conf, encerrar, consulta, primeiraEmpresa, tipo, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
+import { ex, rows, uma, conf, encerrar, consulta, abrirIsolamento, tipo, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
 
 const GRAVAR = process.argv.includes('--gravar-de-verdade');
-const e = await primeiraEmpresa();
+const iso = await abrirIsolamento();
+const e = iso.empresa;
 const t = await tipo('BOLETO');
-const antes = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
 const criados = [];
 const entrada = (o) => ({ empresaId: e.ID, tipoId: t.ID, topId: 0, naturezaId: 0, centroId: 0, contaId: 0, limite: 0, destino: 'FINANCEIRO', codTipTit: 0, codProdPadrao: 0, ...o });
 try {
   // Guarda: aguardando aprovacao
-  const p = await criarLancamentoTeste({ valor: 10 });
+  const p = await criarLancamentoTeste({ empresa: e, tipo: t, valor: 10 });
   criados.push(p.lancamentoId);
   const r1 = await ex('enviarLancamentoParaErp', { lancamentoId: p.lancamentoId, simular: 'S' });
   conf('aguardando aprovacao nao envia', r1.ok === false && r1.motivo === 'AGUARDANDO_APROVACAO');
@@ -33,7 +33,7 @@ try {
   await ex('salvarParametro', entrada({ topId: top.ID, naturezaId: nat.ID, centroId: cen.ID, contaId: cta.ID, limite: 1000000, codTipTit: tit.CODTIPTIT }));
 
   // Guarda: parceiro inexistente (CNPJ sintetico)
-  const l = await criarLancamentoTeste({ valor: 50, cnpj: cnpjFicticio() });
+  const l = await criarLancamentoTeste({ empresa: e, tipo: t, valor: 50, cnpj: cnpjFicticio() });
   criados.push(l.lancamentoId);
   const r3 = await ex('enviarLancamentoParaErp', { lancamentoId: l.lancamentoId, simular: 'S' });
   conf('parceiro inexistente para antes de gravar', r3.ok === false && r3.motivo === 'PARCEIRO_INEXISTENTE' && r3.semParceiro === true, r3.mensagem);
@@ -43,7 +43,7 @@ try {
   if (!unico) {
     console.log('AVISO sem parceiro de referencia: caminho feliz nao exercitado.');
   } else {
-    const n = await criarLancamentoTeste({ valor: 50, cnpj: unico.CGC_CPF, nome: unico.NOMEPARC, numeroDoc: `9${String(Date.now()).slice(-8)}` });
+    const n = await criarLancamentoTeste({ empresa: e, tipo: t, valor: 50, cnpj: unico.CGC_CPF, nome: unico.NOMEPARC, numeroDoc: `9${String(Date.now()).slice(-8)}` });
     criados.push(n.lancamentoId);
     const r4 = await ex('enviarLancamentoParaErp', { lancamentoId: n.lancamentoId, simular: 'S' });
     if (r4.escolhaParceiro) {
@@ -61,7 +61,6 @@ try {
   else console.log('INFO gravacao real nao exercitada: o ERP conectado e de producao e gravar e irreversivel.');
 } finally {
   for (const id of criados) await limparLancamento(id);
-  const atual = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
-  if (!antes && atual) await ex('excluirParametro', { id: atual.ID });
+  await iso.fechar();
 }
 encerrar('Envio de titulo (simulado)');

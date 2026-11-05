@@ -32,4 +32,5 @@
 | MD-0a | Ajustes: criação de nota temporária, conferência de NF-e, investigação do V-17 | ✅ done | V-17 aberto para business; correção depende de decisão |
 | MD-1/2 | Motor de correspondência do piloto TOP 1314 → 1419/1420, só consultas | ✅ primeiro incremento, aguarda revisão | modulo-documental/motor-correspondencia.md |
 | MD-1/2b | Próximos incrementos: trilha de conferência, fila de revisão, operação assistida | ⏳ pending | depois da revisão |
+| MD-P1 | Matriz de parâmetros e testes isolados | ✅ aguarda aprovação; carga não autorizada | parametros/revisao-parametros.md |
 | MD-3/4/5 | Faturamento, piloto e expansão | ⛔ não autorizadas | — |

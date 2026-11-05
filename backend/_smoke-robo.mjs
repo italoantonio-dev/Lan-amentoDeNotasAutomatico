@@ -1,6 +1,6 @@
 // Robo ponta a ponta em modo simulacao, com desfechos distintos. Nao grava no ERP e nao le a caixa.
 // Limpa o que criou; com --limpar, apaga tambem restos de rodadas interrompidas.
-import { ex, rows, uma, conf, encerrar, consulta, dml, b64, tipo } from './lib/smoke.mjs';
+import { ex, rows, uma, conf, encerrar, consulta, dml, b64, tipo, abrirIsolamento } from './lib/smoke.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chaveValida } = require('./robo/leitura.cjs');
@@ -29,11 +29,12 @@ const n = () => Date.now() % 100000000;
 const FORN = '11222333000181';
 const xml = (destino, numero, valor) => `<?xml version="1.0"?><nfeProc><NFe><infNFe Id="NFe${chave(FORN, numero)}"><ide><nNF>${numero}</nNF><serie>1</serie><dhEmi>2026-01-10T10:00:00-03:00</dhEmi></ide><emit><CNPJ>${FORN}</CNPJ><xNome>Fornecedor Robo</xNome></emit><dest><CNPJ>${destino}</CNPJ></dest><det nItem="1"><prod><xProd>Item</xProd><qCom>1</qCom><vUnCom>${valor}</vUnCom></prod></det><total><ICMSTot><vNF>${valor}</vNF></ICMSTot></total><cobr><dup><dVenc>2026-02-10</dVenc></dup></cobr></infNFe></NFe></nfeProc>`;
 
-const e = (await consulta(`SELECT ID, CODEMP, NOME, CNPJ FROM EMPRESAS WHERE ATIVO = TRUE AND LENGTH(CNPJ) = 14 AND CNPJ <> '00000000000000' ORDER BY ID LIMIT 1`))[0];
+const iso = await abrirIsolamento();
+const e = iso.empresa;
 const t = await tipo('NOTA_FISCAL');
-const antes = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
 const entrada = (o) => ({ empresaId: e.ID, tipoId: t.ID, topId: 0, naturezaId: 0, centroId: 0, contaId: 0, limite: 0, destino: 'NOTA', codTipTit: 0, codProdPadrao: 0, ...o });
 const entregar = (nome, conteudo) => ex('roboProcessarAnexo', { nome: `${MARCA}-${nome}`, conteudoB64: b64(conteudo) });
+const corteAntes = (await consulta(`SELECT VALOR FROM ROBO_CONFIG WHERE CHAVE = 'CORTE_CONFIANCA'`))[0].VALOR;
 const antesErp = (await consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'))[0].N;
 try {
   const numero = n();
@@ -83,9 +84,8 @@ try {
   await dml(`DELETE FROM ROBO_EXECUCAO WHERE ID = ${exec.ID}`);
   conf('simulacao nao registrou envio ao ERP', (await consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'))[0].N === antesErp);
 } finally {
-  await ex('roboSalvarConfig', { chave: 'CORTE_CONFIANCA', valor: '90' });
+  await ex('roboSalvarConfig', { chave: 'CORTE_CONFIANCA', valor: corteAntes });
   await limpar();
-  const atual = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
-  if (!antes && atual) await ex('excluirParametro', { id: atual.ID });
+  await iso.fechar();
 }
 encerrar('Robo');

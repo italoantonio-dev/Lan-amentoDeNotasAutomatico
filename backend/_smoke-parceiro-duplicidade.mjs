@@ -1,6 +1,6 @@
 // Parceiro ambiguo e duplicidade no ERP. Regra dura: este smoke nao grava nada no Sankhya.
 // Todos os caminhos terminam na pergunta do parceiro, no bloqueio de duplicidade ou no pedido montado.
-import { ex, uma, conf, encerrar, consulta, primeiraEmpresa, tipo, sdk, projectId, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
+import { ex, uma, conf, encerrar, consulta, abrirIsolamento, tipo, sdk, projectId, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
 
 const EP = '/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json';
 async function erp(sql) {
@@ -9,10 +9,10 @@ async function erp(sql) {
   return r.body.responseBody.rows.map((l) => Object.fromEntries(c.map((x, i) => [x, l[i]])));
 }
 
-const e = await primeiraEmpresa();
+const iso = await abrirIsolamento();
+const e = iso.empresa;
 const t = await tipo('BOLETO');
 const criados = [];
-const antes = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
 try {
   const top = (await consulta(`SELECT ID FROM TOPS WHERE TIPMOV = 'I' AND ATIVO = TRUE ORDER BY CODTIPOPER DESC LIMIT 1`))[0];
   const nat = (await consulta(`SELECT ID FROM NATUREZAS WHERE ATIVO = TRUE AND CODNAT <> '0' LIMIT 1`))[0];
@@ -27,7 +27,7 @@ try {
   conf('CNPJ incompleto nao devolve parceiro', pelaMetade.itens.length === 0);
 
   if (repetidos.length) {
-    const l = await criarLancamentoTeste({ valor: 10, cnpj: repetidos[0].CGC_CPF, nome: 'Ambiguo' });
+    const l = await criarLancamentoTeste({ empresa: e, tipo: t, valor: 10, cnpj: repetidos[0].CGC_CPF, nome: 'Ambiguo' });
     criados.push(l.lancamentoId);
     const r = await ex('enviarLancamentoParaErp', { lancamentoId: l.lancamentoId, simular: 'S' });
     conf('mais de um fornecedor com o CNPJ: para e pergunta', r.ok === false && r.escolhaParceiro === true && r.candidatos.length > 1, `${r.candidatos?.length} candidatos`);
@@ -47,24 +47,20 @@ try {
     empresaAlvo = alvo ? (await consulta(`SELECT ID, CODEMP FROM EMPRESAS WHERE CODEMP = ${Number(alvo.CODEMP)}`))[0] : null;
   }
   if (alvo && empresaAlvo) {
-    const antesAlvo = await uma('parametroComEmpresa', { empresaId: empresaAlvo.ID, tipoId: t.ID });
-    await ex('salvarParametro', { empresaId: empresaAlvo.ID, tipoId: t.ID, topId: top.ID, naturezaId: nat.ID, centroId: cen.ID, contaId: cta.ID, limite: 100000000, destino: 'FINANCEIRO', codTipTit: tit.CODTIPTIT, codProdPadrao: 0 });
+    // Empresa real porque a duplicidade e por CODEMP; o tipo de teste mantem a linha fora dos parametros reais.
+    const tTeste = iso.tipoFinanceiro;
+    await ex('salvarParametro', { empresaId: empresaAlvo.ID, tipoId: tTeste.ID, topId: top.ID, naturezaId: nat.ID, centroId: cen.ID, contaId: cta.ID, limite: 100000000, destino: 'FINANCEIRO', codTipTit: tit.CODTIPTIT, codProdPadrao: 0 });
     const h = (await import('node:crypto')).randomBytes(32).toString('hex');
-    const c = await ex('criarLancamentoViaChat', { origem: 'TELA', empresaId: empresaAlvo.ID, tipoId: t.ID, hash: h, arquivoNome: 'smoke.pdf', cnpj: alvo.CGC_CPF, nome: 'Duplicado', numeroDoc: String(alvo.NUMNOTA), valorTotal: 10, dataEmissao: '2026-01-10', dataVencimento: '2026-02-10' });
+    const c = await ex('criarLancamentoViaChat', { origem: 'TELA', empresaId: empresaAlvo.ID, tipoId: tTeste.ID, hash: h, arquivoNome: 'smoke.pdf', cnpj: alvo.CGC_CPF, nome: 'Duplicado', numeroDoc: String(alvo.NUMNOTA), valorTotal: 10, dataEmissao: '2026-01-10', dataVencimento: '2026-02-10' });
     criados.push(c.lancamentoId);
     let r = await ex('enviarLancamentoParaErp', { lancamentoId: c.lancamentoId, simular: 'S' });
     if (r.escolhaParceiro) r = await ex('enviarLancamentoParaErp', { lancamentoId: c.lancamentoId, simular: 'S', codparc: alvo.CODPARC });
     conf('documento que ja existe no ERP e barrado citando a chave', r.ok === false && r.motivo === 'DUPLICADO_ERP' && /NUFIN/.test(r.mensagem), r.mensagem);
-    if (!antesAlvo && empresaAlvo.ID !== e.ID) {
-      const p = await uma('parametroComEmpresa', { empresaId: empresaAlvo.ID, tipoId: t.ID });
-      if (p) await ex('excluirParametro', { id: p.ID });
-    }
   } else {
     console.log('AVISO nenhum titulo de referencia: duplicidade no ERP nao exercitada.');
   }
 } finally {
   for (const id of criados) await limparLancamento(id);
-  const atual = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
-  if (!antes && atual) await ex('excluirParametro', { id: atual.ID });
+  await iso.fechar();
 }
 encerrar('Parceiro e duplicidade');

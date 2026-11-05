@@ -1,9 +1,9 @@
 // Classificacao por historico, local e ERP. So le o ERP.
-import { ex, conf, encerrar, consulta, primeiraEmpresa, tipo, cnpjFicticio, criarLancamentoTeste, limparLancamento, uma, rows } from './lib/smoke.mjs';
+import { ex, conf, encerrar, consulta, abrirIsolamento, tipo, cnpjFicticio, criarLancamentoTeste, limparLancamento, uma, rows } from './lib/smoke.mjs';
 
-const e = await primeiraEmpresa();
+const iso = await abrirIsolamento();
+const e = iso.empresa;
 const t = await tipo('BOLETO');
-const antes = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
 const criados = [];
 const entrada = (o) => ({ empresaId: e.ID, tipoId: t.ID, topId: 0, naturezaId: 0, centroId: 0, contaId: 0, limite: 0, destino: 'FINANCEIRO', codTipTit: 0, codProdPadrao: 0, ...o });
 try {
@@ -12,16 +12,16 @@ try {
   await ex('salvarParametro', entrada({ topId: top?.ID ?? 0, naturezaId: n1.ID, limite: 1000000 }));
   const cnpj = cnpjFicticio();
 
-  const a = await criarLancamentoTeste({ cnpj });
+  const a = await criarLancamentoTeste({ empresa: e, tipo: t, cnpj });
   criados.push(a.lancamentoId);
   conf('sem historico, vem do parametro', a.origemClassificacao === 'PARAMETRO', a.origemClassificacao);
 
   // Uma pessoa corrige a natureza em dois documentos: agora ha 2 de 2 com 100%.
   await ex('atualizarClassificacaoLancamento', { id: a.lancamentoId, topId: top?.ID ?? 0, naturezaId: n2.ID, centroId: 0, contaId: 0 });
-  const b = await criarLancamentoTeste({ cnpj });
+  const b = await criarLancamentoTeste({ empresa: e, tipo: t, cnpj });
   criados.push(b.lancamentoId);
   await ex('atualizarClassificacaoLancamento', { id: b.lancamentoId, topId: top?.ID ?? 0, naturezaId: n2.ID, centroId: 0, contaId: 0 });
-  const c = await criarLancamentoTeste({ cnpj });
+  const c = await criarLancamentoTeste({ empresa: e, tipo: t, cnpj });
   criados.push(c.lancamentoId);
   const lc = await uma('obterLancamento', { id: c.lancamentoId });
   conf('2 lancamentos com 70% herdam a natureza do historico local', c.origemClassificacao === 'PADRAO_HISTORICO' && Number(lc.NATUREZA_ID) === Number(n2.ID), `natureza ${lc.NATUREZA_ID}`);
@@ -31,10 +31,10 @@ try {
 
   // Fornecedor disperso nao herda: 1 de cada natureza fica abaixo de 70%.
   const disperso = cnpjFicticio();
-  const d1 = await criarLancamentoTeste({ cnpj: disperso });
+  const d1 = await criarLancamentoTeste({ empresa: e, tipo: t, cnpj: disperso });
   criados.push(d1.lancamentoId);
   await ex('atualizarClassificacaoLancamento', { id: d1.lancamentoId, topId: top?.ID ?? 0, naturezaId: n2.ID, centroId: 0, contaId: 0 });
-  const d2 = await criarLancamentoTeste({ cnpj: disperso });
+  const d2 = await criarLancamentoTeste({ empresa: e, tipo: t, cnpj: disperso });
   criados.push(d2.lancamentoId);
   const d3 = await ex('resolverClassificacaoLancamento', { empresaId: e.ID, tipoId: t.ID, cnpj: disperso });
   conf('fornecedor disperso fica no parametro', d3.origem === 'PARAMETRO' && Number(d3.naturezaId) === Number(n1.ID), `origem ${d3.origem}`);
@@ -48,7 +48,6 @@ try {
   conf('historico do fornecedor no ERP responde', h.ok === true && Array.isArray(h.itens));
 } finally {
   for (const id of criados) await limparLancamento(id);
-  const atual = await uma('parametroComEmpresa', { empresaId: e.ID, tipoId: t.ID });
-  if (!antes && atual) await ex('excluirParametro', { id: atual.ID });
+  await iso.fechar();
 }
 encerrar('Padrao do fornecedor');
