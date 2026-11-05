@@ -165,9 +165,9 @@ await sfSQL('roboEmpresas', `SELECT ID, CODEMP, NOME, CNPJ FROM EMPRESAS WHERE A
 // Sem o texto "module.exports": a plataforma o usa para decidir como envolver o codigo, e o await
 // de primeiro nivel deixaria de valer.
 const MOTOR = `const leitura = (function () { ${lerSF('robo/leitura.cjs').replace('module.exports =', 'return')}\n })();`;
-const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', ...arquivos)).replace('/*__MOTOR__*/', () => MOTOR);
+const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', 'sf/_imap.js', ...arquivos)).replace('/*__MOTOR__*/', () => MOTOR);
 
-await sf('roboTestarCaixa', 'JAVASCRIPT', await montarJS('sf/_comum.js', 'sf/roboTestarCaixa.js'), 'Pergunta o perfil a API do e-mail e devolve o endereco e o total de mensagens. E esse o teste que vale para conector proprio.');
+await sf('roboTestarCaixa', 'JAVASCRIPT', await montarJS('sf/_comum.js', 'sf/_imap.js', 'sf/roboTestarCaixa.js'), 'Pergunta o perfil a API do e-mail e devolve o endereco e o total de mensagens. E esse o teste que vale para conector proprio.');
 await sf('roboProcessarAnexo', 'JAVASCRIPT', await COM_MOTOR('sf/roboProcessarAnexo.js'), 'Entrega um documento ao robo pela tela (modo simulacao): mesmo motor, mesma decisao e mesma trilha, sem gravar no ERP. Parametros: nome, conteudoB64.');
 await sf('roboVarrerEmails', 'JAVASCRIPT', await COM_MOTOR('sf/roboVarrerEmails.js'), 'Busca as notas na caixa de e-mail e processa os anexos: le, classifica e confere sem gravar. Nunca grava no ERP nem confirma nota. So rode a pedido do usuario.');
 

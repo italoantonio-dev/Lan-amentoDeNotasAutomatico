@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { uploadFilePrivateMitra } from 'mitra-interactions-sdk';
 import { AlertTriangle, Check, ExternalLink, FileUp, Gauge, Inbox, Plug, RefreshCw, Settings2, Send, ShieldCheck, TriangleAlert, X } from 'lucide-react';
-import { callSF, execSF, exigirAfetou, SF, umaLinha } from '../lib/api';
+import { callSF, execSF, exigirAfetou, PROJECT_ID, SF, umaLinha } from '../lib/api';
 import { formatarData, formatarDataHora, formatarMoeda } from '../lib/formato';
 import { usePermissoes } from '../lib/permissoes';
 import { getMitraErrorMessage } from '../lib/utils';
@@ -274,6 +275,9 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
   const [corte, setCorte] = useState(config.CORTE_CONFIANCA ?? '');
   const [busca, setBusca] = useState(config.GMAIL_QUERY ?? '');
   const [max, setMax] = useState(config.MAX_MENSAGENS ?? '');
+  const ehImap = config.INTEGRACAO === 'imap';
+  const [palavras, setPalavras] = useState(config.IMAP_PALAVRAS ?? '');
+  const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
   const corteOk = /^(100|[0-9]{1,2})$/.test(corte.trim());
@@ -282,12 +286,19 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
   async function salvar() {
     if (!corteOk) { setErro('O corte precisa ser um número inteiro de 0 a 100.'); return; }
     if (!maxOk) { setErro('Mensagens por rodada: um número inteiro de 1 a 50.'); return; }
-    if (!busca.trim()) { setErro('Informe a busca na caixa.'); return; }
+    if (ehImap ? !palavras.trim() : !busca.trim()) { setErro('Informe a busca na caixa.'); return; }
     setSalvando(true);
     setErro('');
     try {
       const semPermissao = 'Sem permissão ou valor inválido — nada foi alterado.';
-      for (const [chave, valor] of [['CORTE_CONFIANCA', corte.trim()], ['GMAIL_QUERY', busca.trim()], ['MAX_MENSAGENS', max.trim()]]) {
+      if (senha) {
+        // Vai como arquivo privado: o input de uma SF fica no log, e a senha nao pode ficar la.
+        const nome = `caixa-${crypto.randomUUID()}.txt`;
+        const up = await uploadFilePrivateMitra({ projectId: PROJECT_ID, file: new File([senha], nome, { type: 'text/plain' }) });
+        const r = await execSF<Linha>(SF.roboImapGuardarSenha, { key: up.result.key });
+        if (!r.ok) throw new Error(String(r.erro ?? 'Não consegui guardar a senha.'));
+      }
+      for (const [chave, valor] of [['CORTE_CONFIANCA', corte.trim()], ehImap ? ['IMAP_PALAVRAS', palavras.trim()] : ['GMAIL_QUERY', busca.trim()], ['MAX_MENSAGENS', max.trim()]]) {
         if (config[chave] === valor) continue;
         await exigirAfetou(SF.roboSalvarConfig, { chave, valor }, semPermissao);
       }
@@ -307,10 +318,21 @@ function AjustesRobo({ config, onFechar, onSalvo }: { config: Record<string, str
           <Input label="Corte de leitura (0 a 100)" inputMode="numeric" value={corte} onChange={(e) => setCorte(e.target.value)} error={corte && !corteOk ? 'Número inteiro de 0 a 100.' : undefined} />
           <p className="text-[12.5px] text-fg-muted mt-1.5">Nota mínima para o robô lançar no ERP sem ninguém conferir. Baixar o corte não “destrava” tudo: acima dele, o documento ainda passa pela alçada e por todas as guardas do envio.</p>
         </div>
-        <div>
+        {ehImap ? (
+          <>
+            <Input label={`Senha da caixa ${config.IMAP_USUARIO ?? ''}`} type="password" autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+            <p className="text-[12.5px] text-fg-muted -mt-2.5">Deixe em branco para manter a atual. Fica guardada em arquivo privado do projeto e só é usada na leitura pedida por um administrador.</p>
+            <div>
+              <Input label="Palavras da busca (separadas por vírgula)" value={palavras} onChange={(e) => setPalavras(e.target.value)} />
+              <p className="text-[12.5px] text-fg-muted mt-1.5">Lê os e-mails dos últimos 7 dias com PDF e alguma dessas palavras no assunto ou no nome do anexo.</p>
+            </div>
+          </>
+        ) : (
+          <div>
           <Input label="Busca na caixa" value={busca} onChange={(e) => setBusca(e.target.value)} />
           <p className="text-[12.5px] text-fg-muted mt-1.5">Mesma sintaxe da busca do Gmail. Ex.: <code>label:notas-fiscais has:attachment</code></p>
         </div>
+        )}
         <Input label="Mensagens por rodada" inputMode="numeric" value={max} onChange={(e) => setMax(e.target.value)} error={max && !maxOk ? 'Número inteiro de 1 a 50.' : undefined} />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onFechar}>Cancelar</Button>

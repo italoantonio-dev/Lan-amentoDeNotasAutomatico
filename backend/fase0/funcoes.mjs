@@ -4,7 +4,7 @@ import { montarJS, lerSF, NONCE } from '../lib/base.mjs';
 
 const BASE = ['sf/_comum.js', 'sf/_erp.js'];
 const MOTOR = `const leitura = (function () { ${lerSF('robo/leitura.cjs').replace('module.exports =', 'return')}\n })();`;
-const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', ...arquivos)).replace('/*__MOTOR__*/', () => MOTOR);
+const COM_MOTOR = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_lancamento.js', 'sf/_robo.js', 'sf/_imap.js', ...arquivos)).replace('/*__MOTOR__*/', () => MOTOR);
 // Conferencia com pedidos: leitor de NF-e e motor de correspondencia entram inteiros, como no robo.
 const MOTOR_CORRESPONDENCIA = `const correspondencia = (function () { ${lerSF('correspondencia/motor.cjs').replace('module.exports =', 'return')}\n })();`;
 const COM_CORRESPONDENCIA = async (...arquivos) => (await montarJS('sf/_comum.js', 'sf/_erp.js', 'sf/_correspondencia.js', ...arquivos))

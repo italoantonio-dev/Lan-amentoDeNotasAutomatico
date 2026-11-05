@@ -5,6 +5,8 @@ const config = await configRobo();
 if (origem === 'CRON' && config.ATIVO !== 'S') return { ok: true, ignorado: true, mensagem: 'Varredura automática desligada.' };
 
 const slug = config.INTEGRACAO || 'gmail';
+const ehImap = slug === 'imap';
+let sessao = null;
 const token = 'r' + Date.now() + Math.random().toString(16).slice(2, 10);
 await chamar(SF.roboCriarExecucao, { token, origem });
 const exec = await uma(SF.roboObterExecucao, { token });
@@ -36,9 +38,13 @@ try {
   const consulta = config.GMAIL_QUERY || 'has:attachment newer_than:7d';
   // UM parametro de consulta por chamada: com dois, o primeiro e descartado no caminho e a API
   // responde 200 com a caixa inteira, sem filtro. O limite sai no slice abaixo. Nao "otimize".
-  const lista = await caixa('/gmail/v1/users/me/messages', { q: consulta });
+  if (ehImap) {
+    if (origem === 'CRON') throw new Error('A caixa IMAP só é lida a pedido.');
+    sessao = await imapAbrir(await imapDados(config));
+  }
+  const lista = ehImap ? null : await caixa('/gmail/v1/users/me/messages', { q: consulta });
   const max = Number(config.MAX_MENSAGENS ?? 10) || 10;
-  const ids = (lista.messages || []).map((m) => m.id);
+  const ids = ehImap ? await imapCandidatos(sessao, String(config.IMAP_PALAVRAS || '').split(','), 7) : (lista.messages || []).map((m) => m.id);
   const jaLidas = new Set((ids.length ? await listar(SF.roboMensagensProcessadas, { ids: ids.join(',') }) : []).map((r) => r.MENSAGEM_ID));
   const novas = ids.filter((i) => !jaLidas.has(i)).slice(0, max);
   // Cada documento custa cerca de 26 execucoes (nota inclui a conferencia com pedidos), e chamada entre SFs conta no limite por minuto do
@@ -49,19 +55,29 @@ try {
   const tipos = await listar(SF.listarTiposDocumento, {});
   for (const id of novas) {
     if (Date.now() - inicio > 230000 || cont.anexos >= TETO_ANEXOS) { parouPorTeto = true; break; } // o teto da SF e 300s
-    const msg = await caixa('/gmail/v1/users/me/messages/' + encodeURIComponent(id));
-    const cab = {};
-    ((msg.payload && msg.payload.headers) || []).forEach((h) => { cab[String(h.name).toLowerCase()] = h.value; });
-    const anexos = acharAnexos(msg.payload, []);
-    const recebido = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString().slice(0, 19) : '';
+    let cab = {};
+    let anexos;
+    let recebido;
+    if (ehImap) {
+      const m = await imapBaixar(sessao, id);
+      cab = m.cab; anexos = m.anexos; recebido = m.recebido;
+    } else {
+      const msg = await caixa('/gmail/v1/users/me/messages/' + encodeURIComponent(id));
+      ((msg.payload && msg.payload.headers) || []).forEach((h) => { cab[String(h.name).toLowerCase()] = h.value; });
+      anexos = acharAnexos(msg.payload, []);
+      recebido = msg.internalDate ? new Date(Number(msg.internalDate)).toISOString().slice(0, 19) : '';
+    }
     await chamar(SF.roboRegistrarEmail, { mensagemId: id, remetente: cab.from || '', assunto: cab.subject || '', recebidoEm: recebido, execucaoId: exec ? exec.ID : 0, anexos: anexos.length, mensagem: '' });
     const email = await uma(SF.roboEmailPorMensagem, { mensagemId: id });
     cont.mensagens++;
     let limite = false;
     for (const a of anexos) {
       try {
-        const bin = await caixa('/gmail/v1/users/me/messages/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(a.id));
-        const buffer = Buffer.from(String(bin.data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+        let buffer = a.buffer;
+        if (!buffer) {
+          const bin = await caixa('/gmail/v1/users/me/messages/' + encodeURIComponent(id) + '/attachments/' + encodeURIComponent(a.id));
+          buffer = Buffer.from(String(bin.data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+        }
         const r = await processarAnexo({ nome: a.nome, buffer, emailId: email ? email.ID : 0, simulacao: false, config, empresas, tipos });
         cont.anexos++;
         if (r.decisao === 'LANCADO') cont.lancados++;
@@ -84,5 +100,7 @@ try {
 } catch (e) {
   const m = msgErro(e);
   await concluir('ERRO', m);
-  return Object.assign({ ok: false, naoConectada: /PREENCHER|invalid_client|invalid_grant|401|Authentication|not found|n[aã]o encontrad/i.test(m), erro: m }, cont);
+  return Object.assign({ ok: false, naoConectada: /IMAP_SEM_SENHA|PREENCHER|invalid_client|invalid_grant|401|Authentication|not found|n[aã]o encontrad/i.test(m), erro: m }, cont);
+} finally {
+  if (sessao) sessao.fechar();
 }

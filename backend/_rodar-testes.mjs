@@ -2,7 +2,7 @@
 // internas das SFs). Uso: node _rodar-testes.mjs [arquivo ...]
 import { spawnSync } from 'node:child_process';
 
-const PADRAO = ['_teste-motor-correspondencia', '_smoke-piloto', '_teste-isolamento-parametros', '_smoke-anexos', '_smoke-permissoes', '_smoke-ajustes', '_smoke-diagnostico-erp', '_smoke-aprovadores', '_smoke-test', '_smoke-erp', '_smoke-padrao', '_smoke-parametros', '_smoke-erp-nota', '_smoke-parceiro-duplicidade', '_smoke-robo', '_smoke-bloqueio-erp'];
+const PADRAO = ['_teste-imap', '_teste-motor-correspondencia', '_smoke-piloto', '_teste-isolamento-parametros', '_smoke-anexos', '_smoke-permissoes', '_smoke-ajustes', '_smoke-diagnostico-erp', '_smoke-aprovadores', '_smoke-test', '_smoke-erp', '_smoke-padrao', '_smoke-parametros', '_smoke-erp-nota', '_smoke-parceiro-duplicidade', '_smoke-robo', '_smoke-bloqueio-erp'];
 const lista = process.argv.slice(2).length ? process.argv.slice(2) : PADRAO;
 const PAUSA = Number(process.env.SMOKE_PAUSA_MS ?? 65000);
 const resultado = [];
