@@ -10,6 +10,7 @@ const LancamentosPage = lazy(() => import('./pages/LancamentosPage'))
 const LancamentoDetalhePage = lazy(() => import('./pages/LancamentoDetalhePage'))
 const CaixaEntradaPage = lazy(() => import('./pages/CaixaEntradaPage'))
 const ConferenciaNfePage = lazy(() => import('./pages/ConferenciaNfePage'))
+const PilotoConferenciaPage = lazy(() => import('./pages/PilotoConferenciaPage'))
 const AprovacoesPage = lazy(() => import('./pages/AprovacoesPage'))
 const ConfiguracaoPage = lazy(() => import('./pages/ConfiguracaoPage'))
 const AssistentePage = lazy(() => import('./pages/AssistentePage'))
@@ -32,6 +33,7 @@ function App() {
           <Route path="/lancamentos/:id" element={<LancamentoDetalhePage />} />
           <Route path="/caixa-entrada" element={<CaixaEntradaPage />} />
           <Route path="/conferencia-nfe" element={<ConferenciaNfePage />} />
+          <Route path="/piloto-conferencia" element={<PilotoConferenciaPage />} />
           <Route path="/aprovacoes" element={<AprovacoesPage />} />
           <Route path="/configuracao" element={<ConfiguracaoPage />} />
           <Route path="/assistente" element={<AssistentePage />} />
