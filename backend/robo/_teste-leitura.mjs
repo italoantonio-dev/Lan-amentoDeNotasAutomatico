@@ -63,5 +63,14 @@ const lf = lerDocumento('foto.pdf', Buffer.from('%PDF-1.4\n1 0 obj\n<< /Filter /
 conf('PDF que e foto cai em zero', pontuar(lf, null).confianca === 0);
 conf('hash estavel', hashConteudo(Buffer.from('a')) === hashConteudo(Buffer.from('a')) && hashConteudo(Buffer.from('a')).length === 64);
 
+const NFSE = '31702062207951563000295000000000044626110801955830';
+const pNfse = `BT (DANFSe v2.0 Documento Auxiliar da NFS-e) Tj 0 -12 Td (CHAVE DE ACESSO DA NFS-e ${NFSE}) Tj 0 -12 Td (DATA E HORA DA EMISSAO DA NFS-e 05/11/2026 13:59:22) Tj 0 -12 Td (TOMADOR 07.542.498/0001- 63) Tj 0 -12 Td (DESTINATARIO DAS NOTAS) Tj 0 -12 Td (Valor Liquido da NFS-e R$ 1.234,56) Tj ET`;
+const ln = lerDocumento('n.pdf', pdfCom([pNfse]));
+conf('NFS-e nacional: chave, emitente, numero e tipo nota', ln.chave === NFSE && ln.modelo === 'NFSE' && ln.cnpjEmitente === '07951563000295' && ln.numero === '446' && ln.tipoProvavel === 'NOTA_FISCAL', JSON.stringify({ c: ln.chave, e: ln.cnpjEmitente, n: ln.numero, t: ln.tipoProvavel }));
+conf('CNPJ com espaco depois do hifen', ln.cnpjsCandidatos.includes('07542498000163'), JSON.stringify(ln.cnpjsCandidatos));
+conf('NFS-e: valor liquido e emissao', ln.valorTotal === 1234.56 && ln.dataEmissao === '2026-11-05', JSON.stringify({ v: ln.valorTotal, d: ln.dataEmissao }));
+conf('NFS-e nunca passa do corte padrao', pontuar(ln, { NOME: 'X' }).confianca < 90, String(pontuar(ln, { NOME: 'X' }).confianca));
+conf('chave NFS-e com digito trocado e recusada', !lerDocumento('n.pdf', pdfCom([pNfse.replace(NFSE, NFSE.slice(0, 49) + '1')])).chave);
+
 console.log(falhas ? `\n${falhas} falha(s).` : '\nMotor de leitura OK.');
 process.exit(falhas ? 1 : 0);

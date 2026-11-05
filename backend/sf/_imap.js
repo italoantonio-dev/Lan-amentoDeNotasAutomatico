@@ -183,7 +183,7 @@ async function imapCandidatos(s, palavras, dias, agora, notas) {
 // Na caixa de notas, XML que nao e NF-e e descartado aqui; o PDF passa pelo filtro de chave em imapSoNotas.
 const imapEhNfe = (buffer) => /<(nfeProc|NFe)[\s>]/.test(buffer.toString('utf8'));
 
-// Caixa pessoal: PDF so entra se tiver chave de NF-e valida (modulo 11, UF, mes e modelo 55/65).
+// Caixa pessoal: PDF so entra se tiver chave valida de NF-e (44 digitos) ou de NFS-e nacional (50).
 // Precisa do leitor do robo, por isso fica fora de imapBaixar.
 function imapSoNotas(anexos, ler) {
   return anexos.filter((a) => !/\.pdf$/i.test(a.nome) || !!ler(a.nome, a.buffer).chave);

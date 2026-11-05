@@ -30,6 +30,19 @@ function chavePlausivel(chave) {
   return UFS.has(Number(chave.slice(0, 2))) && mes >= 1 && mes <= 12 && (modelo === '55' || modelo === '65') && !/^0+$/.test(chave.slice(6, 20));
 }
 
+// NFS-e do padrao nacional: 50 digitos = municipio(7) ambiente(1) tipo de inscricao(1) CNPJ/CPF(14)
+// numero(13) ano e mes(4) codigo(9) DV(1), DV pelo modulo 11 com pesos 2 a 9. So CNPJ (tipo 2).
+function chaveNfseValida(chave) {
+  if (!/^\d{50}$/.test(chave) || chave[8] !== '2' || /^0+$/.test(chave.slice(9, 23))) return false;
+  const mes = Number(chave.slice(38, 40));
+  if (mes < 1 || mes > 12) return false;
+  let soma = 0;
+  let peso = 2;
+  for (let i = 48; i >= 0; i--) { soma += Number(chave[i]) * peso; peso = peso === 9 ? 2 : peso + 1; }
+  const resto = soma % 11;
+  return (resto < 2 ? 0 : 11 - resto) === Number(chave[49]);
+}
+
 function camposDaChave(chave) {
   return { cnpjEmitente: chave.slice(6, 20), serie: String(Number(chave.slice(22, 25))), numero: String(Number(chave.slice(25, 34))) };
 }
@@ -239,10 +252,18 @@ function lerTexto(texto) {
     }
     if (chave) break;
   }
-  const daChave = chave ? camposDaChave(chave) : {};
-  const cnpjs = [...new Set([...normal.matchAll(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g)].map((m) => soDigitos(m[0])).filter((c) => c.length === 14))];
+  let chaveNfse = '';
+  if (!chave) {
+    for (const m of normal.matchAll(/\d(?:[ .]?\d){49,}/g)) {
+      const d = soDigitos(m[0]);
+      for (let i = 0; i + 50 <= d.length && !chaveNfse; i++) if (chaveNfseValida(d.slice(i, i + 50))) chaveNfse = d.slice(i, i + 50);
+      if (chaveNfse) break;
+    }
+  }
+  const daChave = chave ? camposDaChave(chave) : chaveNfse ? { cnpjEmitente: chaveNfse.slice(9, 23), numero: String(Number(chaveNfse.slice(23, 36))), serie: '' } : {};
+  const cnpjs = [...new Set([...normal.matchAll(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}(?:-\s?)?\d{2}\b/g)].map((m) => soDigitos(m[0])).filter((c) => c.length === 14))];
 
-  const rotuladoValor = acharRotulado(normal, ['VALOR\\s+TOTAL\\s+DA\\s+NOTA', 'V\\.?\\s*TOTAL\\s+DA\\s+NOTA', 'VALOR\\s+DO\\s+DOCUMENTO', 'VALOR\\s+COBRADO', 'VALOR\\s+TOTAL', 'TOTAL\\s+A\\s+PAGAR', 'VALOR\\s+A\\s+PAGAR', 'TOTAL\\s+LIQUIDO'], MOEDA);
+  const rotuladoValor = acharRotulado(normal, ['VALOR\\s+LIQUIDO\\s+DA\\s+NFS-?\\s*E', 'VALOR\\s+TOTAL\\s+DA\\s+NOTA', 'V\\.?\\s*TOTAL\\s+DA\\s+NOTA', 'VALOR\\s+DO\\s+DOCUMENTO', 'VALOR\\s+COBRADO', 'VALOR\\s+TOTAL', 'TOTAL\\s+A\\s+PAGAR', 'VALOR\\s+A\\s+PAGAR', 'TOTAL\\s+LIQUIDO'], MOEDA);
   const todos = [...normal.matchAll(new RegExp(MOEDA.source, 'g'))].map((m) => paraNumero(m[1]));
   const maior = todos.length ? Math.max(...todos) : 0;
 
@@ -251,7 +272,7 @@ function lerTexto(texto) {
   const numero = daChave.numero || acharRotulado(normal, ['NOTA\\s+FISCAL\\s*(?:N|NO|NUMERO)?', 'N(?:o|\\u00ba|\\u00b0|UMERO)\\.?\\s+DO\\s+DOCUMENTO', 'NUMERO\\s+DO\\s+DOCUMENTO', 'NF-?E\\s*N'], /(\d[\d.]{0,14})/, 20).replace(/\./g, '');
 
   let tipoProvavel = 'BOLETO';
-  if (chave || /DANFE|NOTA\s+FISCAL/i.test(normal)) tipoProvavel = 'NOTA_FISCAL';
+  if (chave || chaveNfse || /DANFE|NOTA\s+FISCAL/i.test(normal)) tipoProvavel = 'NOTA_FISCAL';
   else if (/DARF|GPS|GUIA\s+DA\s+PREVIDENCIA|DAS\b|GRF|FGTS|DAE\b/i.test(normal)) tipoProvavel = 'GUIA_IMPOSTO';
   else if (/FOLHA\s+DE\s+PAGAMENTO|HOLERITE|RECIBO\s+DE\s+PAGAMENTO/i.test(normal)) tipoProvavel = 'FOLHA_PAGAMENTO';
 
@@ -260,7 +281,8 @@ function lerTexto(texto) {
   return {
     formato: 'PDF',
     texto,
-    chave,
+    chave: chave || chaveNfse,
+    modelo: chave ? 'NFE' : chaveNfse ? 'NFSE' : '',
     cnpjEmitente: emitente,
     nomeEmitente: nomeRotulado ? nomeRotulado[1].trim().slice(0, 200) : '',
     cnpjsCandidatos: cnpjs,
@@ -297,6 +319,9 @@ function pontuar(leitura, empresa) {
     const confere = leitura.chave && chavePlausivel(leitura.chave) && (!leitura.cnpjEmitente || leitura.chave.slice(6, 20) === leitura.cnpjEmitente);
     if (confere) add('CHAVE', 'Chave de acesso', 40, 40, 'XML assinado; dígito verificador e emitente conferem.');
     else add('CHAVE', 'Chave de acesso', 40, 30, 'XML eletrônico, mas a chave não confere (dígito, UF, data ou CNPJ do emitente).');
+  } else if (leitura.modelo === 'NFSE') {
+    // Nota de servico vai sempre para revisao: nao ha conferencia com pedido nem XML.
+    add('CHAVE', 'Chave de acesso', 40, 25, 'Chave de NFS-e conferida pelo dígito verificador. Nota de serviço: confira o lançamento, não há conferência com pedido.');
   } else if (leitura.chave) {
     add('CHAVE', 'Chave de acesso', 40, 40, 'Chave encontrada e conferida pelo módulo 11.');
   } else {
@@ -315,4 +340,4 @@ function pontuar(leitura, empresa) {
   return { confianca: c.reduce((s, x) => s + x.pontos, 0), criterios: c };
 }
 
-module.exports = { lerDocumento, pontuar, hashConteudo, chaveValida, chavePlausivel, extrairTextoPdf, soDigitos };
+module.exports = { lerDocumento, pontuar, hashConteudo, chaveValida, chavePlausivel, chaveNfseValida, extrairTextoPdf, soDigitos };

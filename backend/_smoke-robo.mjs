@@ -78,11 +78,16 @@ try {
 
   const caixa = await ex('roboTestarCaixa');
   conf('caixa sem credencial diz que nao esta conectada', caixa.ok === false, String(caixa.erro).slice(0, 120));
+  // Com caixa real conectada a busca leria e-mail de verdade: o teste nao roda a busca nesse caso.
+  if (caixa.caixas?.length || caixa.ok) {
+    console.log('   INFO busca real nao executada: ha caixa conectada (' + String(caixa.erro).slice(0, 80) + ').');
+  } else {
   const rodada = await ex('roboVarrerEmails', { origem: 'BOTAO' });
   conf('busca sem caixa conectada nao devolve "0 mensagens"', rodada.ok === false && Boolean(rodada.erro), String(rodada.erro).slice(0, 120));
   const exec = await uma('roboUltimaExecucao');
   conf('a rodada registra o motivo real', exec.STATUS === 'ERRO' && Boolean(exec.MENSAGEM));
   await dml(`DELETE FROM ROBO_EXECUCAO WHERE ID = ${exec.ID}`);
+  }
   conf('simulacao nao registrou envio ao ERP', (await consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'))[0].N === antesErp);
 } finally {
   await limpar();

@@ -7,7 +7,7 @@ const seeds = [
   ['IMAP_USUARIO', 'frota@grupolidon.com.br', 'Caixa lida pelo robo'],
   ['IMAP_PALAVRAS', 'boleto,fatura,duplicata,cobranca,titulo,pagamento,vencimento', 'Palavras no assunto ou no nome do anexo'],
   ['IMAP_SEGREDO_KEY', '', 'Key do arquivo privado com a senha'],
-  ['IMAP_NOTAS_USUARIO', 'italo.antonio@grupolidon.com.br', 'Caixa de notas: XML de NF-e ou PDF com chave de NF-e'],
+  ['IMAP_NOTAS_USUARIO', 'italo.antonio@grupolidon.com.br', 'Caixa de notas: XML de NF-e ou PDF com chave de NF-e ou NFS-e'],
   ['IMAP_NOTAS_SEGREDO_KEY', '', 'Key do arquivo privado com a senha da caixa de notas'],
 ];
 for (const [c, v, d] of seeds) {

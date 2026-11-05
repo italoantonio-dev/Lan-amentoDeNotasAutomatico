@@ -11,6 +11,8 @@ A senha fica em arquivo privado do projeto, fora de tabelas e do registro de exe
 
 ## Caixa de notas (italo.antonio@grupolidon.com.br)
 
-Em Ajustes, preencha **Senha da caixa de notas**. Essa caixa é lida na mesma rodada, também só para consulta: entram apenas e-mails dos últimos 7 dias com XML de NF-e ou PDF com chave de NF-e válida, sem usar as palavras. Outros PDFs e XMLs são ignorados, e de um e-mail sem NF-e não se guardam remetente nem assunto. O corpo do e-mail não é guardado.
+Em Ajustes, preencha **Senha da caixa de notas**. Essa caixa é lida na mesma rodada, também só para consulta: entram apenas e-mails dos últimos 7 dias com XML de NF-e ou PDF com chave válida de NF-e ou de NFS-e nacional (nota de serviço), sem usar as palavras. Outros PDFs e XMLs são ignorados, e de um e-mail sem NF-e não se guardam remetente nem assunto. O corpo do e-mail não é guardado.
 
 Nota que chega só em PDF entra com os dados do cabeçalho (chave, número, emitente) e vai para revisão: sem o XML não há itens para conferir com o pedido nem entrada no piloto.
+
+A NFS-e entra como nota fiscal, sempre em revisão: não tem XML de itens nem conferência com pedido.
