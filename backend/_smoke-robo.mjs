@@ -59,8 +59,9 @@ try {
   const foto = await ex('roboProcessarAnexo', { nome: `${MARCA}-foto.pdf`, conteudoB64: Buffer.from(pdf, 'latin1').toString('base64') });
   conf('foto de papel cai em zero e nao vira lancamento errado', foto.decisao === 'SEM_EMPRESA' && foto.confianca === 0, foto.motivo);
 
-  await ex('roboSalvarConfig', { chave: 'CORTE_CONFIANCA', valor: '100' });
-  const semChave = xml(e.CNPJ, n() + 3, '10.00').replace(/Id="NFe\d{44}"/, 'Id="NFe00000000000000000000000000000000000000000000"');
+  // Sem mexer no corte real: chave invalida (-10) e sem emissao (-10) dao 80, abaixo do corte.
+  const semChave = xml(e.CNPJ, n() + 3, '10.00').replace(/Id="NFe\d{44}"/, 'Id="NFe00000000000000000000000000000000000000000000"').replace(/<dhEmi>[^<]*<\/dhEmi>/, '');
+  if (Number(corteAntes) <= 80) throw new Error(`corte real ${corteAntes} <= 80: este cenario precisa de documento com nota menor.`);
   const abaixo = await entregar('abaixo.xml', semChave);
   conf('abaixo do corte vai para revisao de leitura', abaixo.decisao === 'REVISAO' && abaixo.confianca < 100, abaixo.motivo);
   const lrev = await uma('obterLancamento', { id: abaixo.lancamentoId });
@@ -84,7 +85,6 @@ try {
   await dml(`DELETE FROM ROBO_EXECUCAO WHERE ID = ${exec.ID}`);
   conf('simulacao nao registrou envio ao ERP', (await consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'))[0].N === antesErp);
 } finally {
-  await ex('roboSalvarConfig', { chave: 'CORTE_CONFIANCA', valor: corteAntes });
   await limpar();
   await iso.fechar();
 }

@@ -32,7 +32,7 @@ export const GUIA: { titulo: string; corpo: string[] }[] = [
     corpo: [
       'Cada aprovador tem uma alçada: um teto de valor, ou qualquer valor quando fica em branco. Quem aprova é o login vinculado pelo e-mail ao aprovador.',
       'Itens acima da sua alçada aparecem com os botões desabilitados e o motivo à vista. A recusa também acontece no servidor.',
-      'Enquanto não houver aprovador cadastrado, a alçada não vale, e a tela avisa.',
+      'Sem aprovador ativo, com login, perfil Aprovador, teto e empresa liberada, ninguém decide: a falta de configuração sempre recusa.',
     ],
   },
   {

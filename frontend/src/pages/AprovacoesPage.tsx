@@ -63,15 +63,14 @@ export default function AprovacoesPage() {
   }
 
   const semAprovador = alcada && Number(alcada.TOTAL_APROVADORES) === 0;
-  const descricaoAlcada = !alcada ? '' : semAprovador ? 'Sem aprovador cadastrado: a alçada ainda não vale.' : !Number(alcada.SOU_APROVADOR) ? 'Você não está cadastrado como aprovador.' : Number(alcada.SEM_TETO) ? 'Você aprova qualquer valor.' : `Você aprova até ${formatarMoeda(alcada.LIMITE)}.`;
+  const descricaoAlcada = !alcada ? '' : semAprovador ? 'Sem aprovador ativo: nenhuma decisão pode ser tomada.' : !Number(alcada.SOU_APROVADOR) ? 'Você não está vinculado a um aprovador.' : !Number(alcada.TEM_PERFIL) ? 'Você não tem o perfil Aprovador.' : !alcada.LIMITE ? 'Seu teto de alçada não está definido: você não pode decidir.' : !Number(alcada.ESCOPOS) ? 'Nenhuma empresa ou tipo liberado para você na política de aprovação.' : `Você aprova até ${formatarMoeda(alcada.LIMITE)}, nas empresas e tipos liberados.`;
 
   return (
     <div className="p-4 md:p-8">
       <CabecalhoPagina titulo="Aprovações" descricao={descricaoAlcada || 'Decisões que dependem de uma pessoa.'} />
       {semAprovador && (
         <Aviso tipo="warning" acao={<Button size="sm" variant="secondary" onClick={() => nav('/configuracao?aba=aprovadores')}>Cadastrar aprovadores</Button>}>
-          Enquanto não houver aprovador cadastrado, qualquer usuário logado decide qualquer valor. Cadastre em Configuração → Aprovadores para a alçada valer.
-        </Aviso>
+          Sem aprovador ativo, nenhuma decisão pode ser tomada. Cadastre em Configuração → Aprovadores, com teto, perfil Aprovador e empresas liberadas.</Aviso>
       )}
       <Card>
         {erro ? (

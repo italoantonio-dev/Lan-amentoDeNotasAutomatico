@@ -9,13 +9,13 @@ export const hash = () => crypto.randomBytes(32).toString('hex');
 export const chave = () => crypto.randomUUID();
 export const b64 = (t) => Buffer.from(String(t), 'utf8').toString('base64');
 
-// So nos smokes: esperar a janela do limite por minuto, para o teste nao falhar por volume.
-// O sistema nunca faz isso: retentativa automatica mantem o limite degradado.
-async function esperarJanela(e) {
-  if (!/RATE_LIMIT/.test(JSON.stringify(e))) throw e;
-  console.log('INFO limite por minuto atingido pelos testes: aguardando a janela.');
-  await new Promise((ok) => setTimeout(ok, 65000));
-}
+// Limite por minuto: so repete quando a plataforma recusou a chamada antes de executar (HTTP 429).
+// Se o limite estourou DENTRO da SF, parte dela pode ter rodado: repetir duplicaria o efeito,
+// entao o teste para com a mensagem. O espacamento entre chamadas evita chegar ao limite.
+const ESPACO_MS = Number(process.env.SMOKE_ESPACO_MS ?? 250);
+let ultima = 0;
+const pausa = (ms) => new Promise((ok) => setTimeout(ok, ms));
+const ehLimite = (e) => /RATE_LIMIT|429/.test(JSON.stringify(e));
 
 export async function ex(nome, input = {}) {
   await barrarParametroReal(nome, input);
@@ -23,15 +23,21 @@ export async function ex(nome, input = {}) {
   const id = mapa.get(nome);
   if (!id) throw new Error(`SF ${nome} nao existe`);
   let r;
-  try {
-    r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: id, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
-  } catch (e) {
-    await esperarJanela(e);
-    r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: id, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
+  for (let tentativa = 0; ; tentativa++) {
+    const espera = ultima + ESPACO_MS - Date.now();
+    if (espera > 0) await pausa(espera);
+    ultima = Date.now();
+    try {
+      r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: id, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
+      break;
+    } catch (e) {
+      if (!ehLimite(e) || tentativa >= 2) throw e;
+      console.log('INFO limite por minuto: chamada recusada antes de executar; aguardando a janela.');
+      await pausa(65000);
+    }
   }
-  if (r.result.executionStatus === 'FAILED' && /RATE_LIMIT/.test(JSON.stringify(r.result.error))) {
-    await esperarJanela({ message: { name: 'RATE_LIMIT_EXCEEDED' } });
-    r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: id, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
+  if (r.result.executionStatus === 'FAILED' && ehLimite(r.result.error)) {
+    throw new Error(`${nome}: limite por minuto atingido dentro da SF. Nao repetido para nao duplicar efeito; rode com _rodar-testes.mjs.`);
   }
   if (r.result.executionStatus === 'FAILED') throw new Error(`${nome}: ${typeof r.result.error === 'string' ? r.result.error : JSON.stringify(r.result.error)}`);
   let out = r.result.output;
@@ -89,6 +95,8 @@ const idsTeste = async () => ({
 // Tambem apaga restos de uma rodada interrompida.
 export async function removerDadosTeste() {
   const { emp, tip } = await idsTeste();
+  await dml('DELETE AE FROM APROVADOR_ESCOPO AE JOIN APROVADORES A ON A.ID = AE.APROVADOR_ID WHERE A.CODUSU >= 990000');
+  await dml('DELETE FROM APROVADORES WHERE CODUSU >= 990000');
   if (!emp && !tip) return;
   await dml(`DELETE FROM PARAMETROS_LANCAMENTO WHERE EMPRESA_ID = ${emp} OR TIPO_DOCUMENTO_ID = ${tip}`);
   await dml(`DELETE FROM DOCUMENTOS WHERE EMPRESA_ID = ${emp} OR TIPO_DOCUMENTO_ID = ${tip}`);
@@ -99,13 +107,15 @@ export async function removerDadosTeste() {
 // O que os smokes nao podem mudar. Compara o conteudo inteiro, inclusive CRIADO_EM.
 async function fotografarReais() {
   const { emp, tip } = await idsTeste();
-  const [parametros, aprovadores, config, envios] = await Promise.all([
+  const [parametros, aprovadores, escopos, perfis, config, envios] = await Promise.all([
     consulta(`SELECT * FROM PARAMETROS_LANCAMENTO WHERE EMPRESA_ID <> ${emp} AND TIPO_DOCUMENTO_ID <> ${tip} ORDER BY ID`),
     consulta('SELECT * FROM APROVADORES ORDER BY ID'),
+    consulta('SELECT * FROM APROVADOR_ESCOPO ORDER BY ID'),
+    consulta('SELECT PROFILEID, USERID FROM INT_PROFILEUSER WHERE PROFILEID > 0 ORDER BY PROFILEID, USERID'),
     consulta('SELECT CHAVE, VALOR FROM ROBO_CONFIG ORDER BY CHAVE'),
     consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'),
   ]);
-  return JSON.stringify({ parametros, aprovadores, config, envios });
+  return JSON.stringify({ parametros, aprovadores, escopos, perfis, config, envios });
 }
 
 export async function abrirIsolamento() {
@@ -125,7 +135,7 @@ export async function abrirIsolamento() {
       await removerDadosTeste();
       const { emp: e2, tip: t2 } = await idsTeste();
       conf('nenhum dado de teste ficou para tras', !e2 && !t2);
-      conf('parametros, aprovadores, configuracao e envios reais iguais ao inicio', (await fotografarReais()) === foto);
+      conf('parametros, aprovadores, politica, perfis, configuracao e envios reais iguais ao inicio', (await fotografarReais()) === foto);
     },
   };
 }
@@ -173,7 +183,7 @@ export async function comPerfilTemporario(fn) {
 }
 
 export async function criarLancamentoTeste(extra = {}) {
-  const e = extra.empresa ?? await primeiraEmpresa();
+  const e = extra.empresa ?? isolado?.empresa ?? await primeiraEmpresa();
   const t = extra.tipo ?? await tipo(extra.tipoCodigo ?? 'BOLETO');
   const h = hash();
   const r = await ex('criarLancamentoViaChat', {
@@ -184,3 +194,34 @@ export async function criarLancamentoTeste(extra = {}) {
   return { ...r, empresa: e, tipo: t, hash: h };
 }
 export const limparLancamento = (id) => ex('excluirLancamento', { id }).catch(() => null);
+
+// Copias das SFs de decisao trocando o perfil Aprovador real por um temporario. O perfil temporario
+// (com ou sem quem roda) e apagado no fim; o perfil real e seus usuarios nao sao tocados.
+export async function comAprovadorTemporario(comigo, fn) {
+  const nomePerfil = `ZZ Smoke Aprovador ${Date.now()}`;
+  await sdk.createProfileMitra({ projectId, name: nomePerfil });
+  const temp = (await sdk.listProfilesMitra({ projectId })).result.find((p) => p.name === nomePerfil);
+  const { Aprovador: real } = await garantirPerfis();
+  const criadas = [];
+  try {
+    if (comigo) await sdk.setProfileUsersMitra({ projectId, profileId: temp.id, userIds: [Number((await ex('chatUsuarioAtual')).rows[0].ID)] });
+    const copiar = async (nome) => {
+      const orig = await sdk.readServerFunctionMitra({ projectId, serverFunctionId: (await carregarSFs()).get(nome) });
+      const code = String(orig.result.code).replaceAll(`PAP.PROFILEID = ${real}`, `PAP.PROFILEID = ${temp.id}`);
+      if (code === orig.result.code) throw new Error(`${nome} nao cita o perfil Aprovador`);
+      const c = await sdk.createServerFunctionMitra({ projectId, name: `zz_${nome}_${Date.now()}`, type: 'SQL', code, description: 'copia temporaria de smoke' });
+      criadas.push(c.result.serverFunctionId);
+      return async (input) => {
+        await pausa(ESPACO_MS);
+        const r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: c.result.serverFunctionId, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
+        if (r.result.executionStatus === 'FAILED') throw new Error(`${nome} (copia): ${JSON.stringify(r.result.error)}`);
+        const o = typeof r.result.output === 'string' ? JSON.parse(r.result.output) : r.result.output;
+        return o.rows ? o.rows[0] : o;
+      };
+    };
+    await fn(copiar);
+  } finally {
+    for (const id of criadas) await sdk.deleteServerFunctionMitra({ projectId, serverFunctionId: id }).catch(() => {});
+    await sdk.deleteProfileMitra({ projectId, profileId: temp.id }).catch(() => {});
+  }
+}

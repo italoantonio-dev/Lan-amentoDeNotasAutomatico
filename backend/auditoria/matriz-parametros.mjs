@@ -116,6 +116,56 @@ for (const l of lev) {
     FORNECEDORES_COM_SUGESTAO: `${sug} de ${f.length}`, ...fora,
   });
 }
+// ---------- Matriz por operacao: a operacao vem da TOP vigente, nunca da frequencia ----------
+const todasNotas = await ler(`SELECT C.CODEMP, C.CODTIPOPER, COUNT(*) AS NOTAS, SUM(CASE WHEN C.CHAVENFE IS NOT NULL THEN 1 ELSE 0 END) AS COM_CHAVE,
+    SUM(CASE WHEN EXISTS (SELECT 1 FROM TGFVAR V JOIN TGFCAB P ON P.NUNOTA = V.NUNOTAORIG WHERE V.NUNOTA = C.NUNOTA AND P.TIPMOV = 'O') THEN 1 ELSE 0 END) AS DE_PEDIDO
+  FROM TGFCAB C WHERE C.TIPMOV = 'C' AND C.CODEMP IN (${IN_EMP}) AND ${PER('C')} GROUP BY C.CODEMP, C.CODTIPOPER`,
+meta('Notas de compra (com e sem chave) por empresa e TOP, com origem em pedido', 'TGFCAB + TGFVAR', `TIPMOV = 'C', CODEMP em ${IN_EMP}`));
+const OPERACOES = [
+  ['USO_CONSUMO', 'Compra para uso e consumo', /USO\/?\s*CONSUMO|CONSUMO/],
+  ['REVENDA_PECAS', 'Revenda de peças', /PECA/],
+  ['REVENDA_MAQUINARIO', 'Revenda de maquinário', /MAQUINA/],
+  ['TRANSFERENCIA', 'Transferência entre empresas', /TRANSF/],
+  ['SERVICOS', 'Serviços', /SERVI/],
+];
+const operacaoDaTop = (c) => {
+  const d = String(TOP_ERP.get(Number(c))?.DESCROPER ?? '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/BONIFICA|DEMONSTRA|RETORNO|REMESSA|AJUSTE|COMPLEMENTO/.test(d)) return 'OUTRA_ENTRADA';
+  return OPERACOES.find(([, , re]) => re.test(d))?.[0] ?? 'OUTRA_ENTRADA';
+};
+const ops = [];
+for (const codemp of EMPRESAS) {
+  const nomeEmp = lev.find((l) => Number(l.CODEMP) === codemp)?.EMPRESA ?? '';
+  const grupos = {};
+  for (const n of todasNotas.filter((x) => Number(x.CODEMP) === codemp)) (grupos[operacaoDaTop(n.CODTIPOPER)] ??= []).push(n);
+  for (const [cod, nome] of [...OPERACOES.map(([c, d]) => [c, d]), ['OUTRA_ENTRADA', 'Outra entrada (demonstração, devolução etc.)']]) {
+    const g = (grupos[cod] ?? []).sort((a, b) => num(b.NOTAS) - num(a.NOTAS));
+    const total = g.reduce((a, x) => a + num(x.NOTAS), 0);
+    const ped = g.reduce((a, x) => a + num(x.DE_PEDIDO), 0);
+    const chave = g.reduce((a, x) => a + num(x.COM_CHAVE), 0);
+    const top = g[0];
+    const cob = top ? Number(pct(num(top.NOTAS), total)) : 0;
+    ops.push({ CODEMP: codemp, EMPRESA: nomeEmp, OPERACAO: nome, DOCUMENTOS_12M: total, PCT_DE_PEDIDO: pct(ped, total), PCT_COM_CHAVE_NFE: pct(chave, total),
+      TOPS_USADAS: g.map((x) => `${x.CODTIPOPER} ${TOP_ERP.get(Number(x.CODTIPOPER))?.DESCROPER ?? ''}: ${x.NOTAS}`).join(' | '),
+      TOP_PROPOSTA: !total || cod === 'TRANSFERENCIA' || cod === 'OUTRA_ENTRADA' ? '' : top.CODTIPOPER,
+      REGRA: cod === 'TRANSFERENCIA' ? 'Fora da automação de compra: entrada vem da saída da outra empresa' : cod === 'OUTRA_ENTRADA' ? 'Fora do escopo; revisão manual' : !total ? 'Sem movimento' : ped / total >= 0.5 ? 'Com pedido: vale a TOP de destino do pedido; TOP proposta só sem pedido' : 'TOP proposta só como candidata; confirmar por documento',
+      CONFIANCA: cod === 'TRANSFERENCIA' || cod === 'OUTRA_ENTRADA' ? 'NÃO SE APLICA' : !total ? 'INSUFICIENTE' : total < 30 ? 'BAIXA' : cob >= 80 ? 'ALTA' : cob >= 50 ? 'MEDIA' : 'BAIXA',
+      NATUREZA: 'PENDENTE DE REVISÃO', CENTRO: 'PENDENTE DE REVISÃO', ALCADA: 'NÃO DEFINIDA',
+      RESPONSAVEL: cod === 'TRANSFERENCIA' ? 'Fiscal + Contabilidade' : 'Fiscal; natureza e centro: Contabilidade + Controladoria', SITUACAO_APROVACAO: 'PROPOSTO, NÃO APROVADO' });
+  }
+  for (const tipoDoc of ['BOLETO', 'GUIA_IMPOSTO']) {
+    const l = linhas.find((x) => x.CODEMP === codemp && x.TIPO === tipoDoc);
+    if (l) ops.push({ CODEMP: codemp, EMPRESA: nomeEmp, OPERACAO: tipoDoc === 'BOLETO' ? 'Boletos' : 'Guias tributárias', DOCUMENTOS_12M: '', PCT_DE_PEDIDO: '', PCT_COM_CHAVE_NFE: '', TOPS_USADAS: l.EVIDENCIA, TOP_PROPOSTA: l.TOP, REGRA: l.TOP_REGRA, CONFIANCA: l.CONFIANCA, NATUREZA: l.NATUREZA, CENTRO: l.CENTRO, ALCADA: 'NÃO DEFINIDA', RESPONSAVEL: l.RESPONSAVEL, SITUACAO_APROVACAO: l.SITUACAO_APROVACAO });
+  }
+}
+const colsOp = Object.keys(ops[0]).concat(['TOP_APROVADA', 'NATUREZA_APROVADA', 'CENTRO_APROVADO', 'APROVADO_POR', 'DATA_APROVACAO']);
+const qOp = (x) => { const s2 = String(x ?? ''); return /[;"\n]/.test(s2) ? `"${s2.replace(/"/g, '""')}"` : s2; };
+fs.writeFileSync(path.join(SAIDA, 'matriz-operacoes.csv'), `\uFEFF${[colsOp.join(';'), ...ops.map((o) => colsOp.map((c) => qOp(o[c])).join(';'))].join('\r\n')}\r\n`);
+const somaOp = {};
+for (const o of ops) { const k = o.OPERACAO; somaOp[k] ??= { docs: 0, comTop: 0 }; somaOp[k].docs += Number(o.DOCUMENTOS_12M || 0); if (o.TOP_PROPOSTA) somaOp[k].comTop++; }
+console.log('OPERACOES', JSON.stringify(somaOp));
+console.log('TOPS_POR_OP', JSON.stringify([...new Set(todasNotas.map((n) => Number(n.CODTIPOPER)))].map((c) => `${c}=${operacaoDaTop(c)} ${TOP_ERP.get(c)?.DESCROPER}`)));
+
 const ordemTipo = { NOTA_FISCAL: 1, BOLETO: 2, GUIA_IMPOSTO: 3, FOLHA_PAGAMENTO: 4 };
 linhas.sort((a, b) => EMPRESAS.indexOf(a.CODEMP) - EMPRESAS.indexOf(b.CODEMP) || ordemTipo[a.TIPO] - ordemTipo[b.TIPO]);
 const cols = ['CODEMP', 'EMPRESA', 'TIPO', 'TOP', 'TOP_DESCRICAO', 'TOP_REGRA', 'NATUREZA', 'CENTRO', 'ALCADA', 'ORIGEM_REGRA', 'EVIDENCIA', 'CONFIANCA', 'RISCO', 'RESPONSAVEL', 'SITUACAO_APROVACAO', 'CARREGAVEL', 'VALIDACAO_CODIGOS', 'FORNECEDORES_COM_SUGESTAO', 'CONTA_REFERENCIA', 'TIPO_TITULO_REFERENCIA', 'PRODUTO_REFERENCIA', 'TOP_APROVADA', 'NATUREZA_APROVADA', 'CENTRO_APROVADO', 'ALCADA_APROVADA', 'APROVADO_POR', 'DATA_APROVACAO'];

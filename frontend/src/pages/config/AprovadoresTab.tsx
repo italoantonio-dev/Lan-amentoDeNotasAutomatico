@@ -81,7 +81,7 @@ export default function AprovadoresTab({ onAviso }: { onAviso: (t: 'success' | '
   const ativos = linhas.filter((l) => Number(l.ATIVO) === 1).length;
   return (
     <>
-      {ativos === 0 && !carregando && <Aviso tipo="warning">Enquanto não houver aprovador, a alçada não vale: qualquer usuário logado decide qualquer valor.</Aviso>}
+      {ativos === 0 && !carregando && <Aviso tipo="warning">Sem aprovador ativo, nenhuma decisão pode ser tomada. Para decidir, o aprovador precisa de login com o mesmo e-mail, perfil Aprovador, teto definido e empresas liberadas.</Aviso>}
       <div className="flex justify-end mb-4"><Button onClick={() => abrir()}><Plus size={16} /> Adicionar aprovador</Button></div>
       <Card>
         {erro ? <EstadoErro mensagem={erro} onRetry={carregar} /> : carregando ? <SkeletonTable /> : linhas.length === 0 ? (
