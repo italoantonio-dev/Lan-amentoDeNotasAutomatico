@@ -1,10 +1,11 @@
 // Anexos: fechamento do ciclo do documento na conversa.
-import { ex, rows, uma, conf, encerrar, chave, b64, hash, primeiraEmpresa, tipo, cnpjFicticio, limparLancamento, sdk, projectId, consulta } from './lib/smoke.mjs';
+import { ex, rows, uma, conf, encerrar, chave, b64, hash, abrirIsolamento, tipo, cnpjFicticio, limparLancamento, sdk, projectId, consulta } from './lib/smoke.mjs';
 
 const k = chave();
 await ex('chatCriarConversa', { chave: k, titulo: 'Anexos Smoke', modelo: '' });
 const c = await uma('chatObterConversa', { chave: k, id: 0 });
-const e = await primeiraEmpresa();
+const iso = await abrirIsolamento();
+const e = iso.empresa;
 const t = await tipo('BOLETO');
 const criados = [];
 try {
@@ -46,5 +47,6 @@ try {
   await ex('chatExcluirAnexos', { id: c.ID });
   await ex('chatExcluirMensagensConversa', { id: c.ID });
   await ex('chatExcluirConversa', { id: c.ID });
+  await iso.fechar();
 }
 encerrar('Anexos');

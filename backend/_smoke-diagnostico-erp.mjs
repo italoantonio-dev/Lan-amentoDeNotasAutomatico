@@ -1,5 +1,5 @@
 // Tradutor da recusa e conferencia de cadastro. So le o ERP: a correcao esta bloqueada desde a Fase 0.
-import { ex, conf, encerrar, cnpjFicticio, criarLancamentoTeste, limparLancamento } from './lib/smoke.mjs';
+import { ex, conf, encerrar, cnpjFicticio, criarLancamentoTeste, limparLancamento, abrirIsolamento } from './lib/smoke.mjs';
 import { diagnosticar, limparMensagem } from '../frontend/src/lib/diagnosticoErp.ts';
 
 const real = 'ORA-20101: O parceiro 71 deve ser um fornecedor na nota de Nro Unico:11346.\nORA-06512: em "SANKHYA.TRG_INC_TGFCAB", line 462\nORA-04088: erro durante a execucao do gatilho';
@@ -11,6 +11,7 @@ conf('registro duplicado avisa que tentar piora', diagnosticar('ORA-00001: uniqu
 conf('sem resposta avisa que tentar piora', diagnosticar('timeout ao chamar o ERP').tentarDeNovo === false);
 conf('credencial nao vira erro de cadastro', diagnosticar('O ERP respondeu HTTP 401').codigo === 'CREDENCIAL');
 
+const iso = await abrirIsolamento();
 const l = await criarLancamentoTeste({ cnpj: cnpjFicticio() });
 try {
   const c = await ex('conferirCadastroErp', { lancamentoId: l.lancamentoId });
@@ -19,5 +20,6 @@ try {
   conf('correcao de cadastro esta bloqueada', invalida.ok === false && invalida.motivo === 'GRAVACAO_BLOQUEADA', invalida.erro);
 } finally {
   await limparLancamento(l.lancamentoId);
+  await iso.fechar();
 }
 encerrar('Diagnostico do ERP');

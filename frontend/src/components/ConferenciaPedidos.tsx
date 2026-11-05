@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, ShieldCheck } from 'lucide-react';
+import { ChevronDown, ChevronRight, ShieldCheck, UserCheck } from 'lucide-react';
 import Badge from './ui/Badge';
 import { Aviso } from './Comum';
 import { formatarData, formatarMoeda } from '../lib/formato';
@@ -10,12 +10,14 @@ interface Linha {
   pedido: number; numeroPedido: number | null; sequencia: number; codprod: number; descricao: string;
   negociada: number; entregue: number; pendente: number; quantidadeDocumento: number; saldoAposDocumento: number | null;
   unidadePedido: string; unidadeDocumento: string; precoPedido: number; precoDocumento: number; diferencaPreco: number; diferencaPrecoPct: number | null;
+  descontoDocumento?: number; precoLiquidoDocumento?: number; referenciaConfere?: boolean | null;
   divergencias: string[];
 }
 interface Item {
   nItem: number | null; cProd: string; xProd: string; quantidade: number; unidade: string; valorUnitario: number; situacao: string;
   identificacao: { situacao: string; fonte: string; codprods: number[]; sugestoes: number[] };
   pedidos: number[]; linhas: Linha[]; linhasSugeridas: Linha[]; pendenteEmOutraEmpresa: number[];
+  referenciaPedido?: { pedido: string; item: string; confereCom: number[] } | null; descontoDocumento?: number;
 }
 interface Vinculo { NUNOTA: number; NUMNOTA: number | null; CODTIPOPER: number; STATUSNOTA: string; SEQUENCIAORIG: number; QTDATENDIDA: number }
 interface Pedido {
@@ -24,7 +26,8 @@ interface Pedido {
 }
 interface ResultadoCorrespondencia {
   situacao: string; resumo: string;
-  documento: { numero: string; serie: string; dataEmissao: string; valorTotal: number; itens: number };
+  documento: { numero: string; serie: string; dataEmissao: string; valorTotal: number; itens: number; chave?: string; cnpjEmitente?: string; cnpjDestinatario?: string };
+  classificacao?: string; justificativa?: string; intervencaoHumana?: { codigo: string; texto: string }[];
   empresas: { CODEMP: number; NOME: string }[]; parceiros: { CODPARC: number; NOME: string }[];
   itens: Item[]; pedidos: Pedido[]; alertas: { tipo: string; mensagem: string }[];
 }
@@ -39,6 +42,12 @@ const SITUACOES: Record<string, { rotulo: string; variante: Variante }> = {
   SEM_EMPRESA: { rotulo: 'Destinatário sem empresa', variante: 'danger' },
   SEM_FORNECEDOR: { rotulo: 'Fornecedor não encontrado', variante: 'danger' },
   SEM_ITENS: { rotulo: 'Sem itens', variante: 'neutral' },
+};
+const CLASSES: Record<string, { rotulo: string; variante: Variante }> = {
+  SEGURA: { rotulo: 'Correspondência segura', variante: 'success' },
+  AMBIGUA: { rotulo: 'Ambígua', variante: 'warning' },
+  INCOMPATIVEL: { rotulo: 'Incompatível: exige conferência', variante: 'danger' },
+  SEM_PEDIDO: { rotulo: 'Sem pedido', variante: 'neutral' },
 };
 const ITENS: Record<string, { rotulo: string; variante: Variante }> = {
   PEDIDO_UNICO: { rotulo: 'Um pedido', variante: 'success' },
@@ -108,6 +117,13 @@ function LinhaItem({ item }: { item: Item }) {
       {aberto && (
         <div className="px-5 pb-4 flex flex-col gap-2">
           {item.linhas.length > 0 && <TabelaLinhas linhas={item.linhas} />}
+          {item.referenciaPedido && (
+            <p className="text-[12.5px] text-fg-muted">
+              Referência de pedido no XML: {item.referenciaPedido.pedido}{item.referenciaPedido.item ? `, item ${item.referenciaPedido.item}` : ''}.{' '}
+              {item.referenciaPedido.confereCom.length ? `Confere com o pedido ${item.referenciaPedido.confereCom.join(', ')}.` : 'Não confere com nenhum pedido candidato.'}
+            </p>
+          )}
+          {Number(item.descontoDocumento) > 0 && <p className="text-[12.5px] text-fg-muted">Desconto no item da nota: {preco(Number(item.descontoDocumento))}. A comparação usa o preço unitário cheio; o líquido aparece para conferência.</p>}
           {item.situacao === 'PRODUTO_NAO_IDENTIFICADO' && item.identificacao.sugestoes.length > 0 && (
             <>
               <p className="text-[12.5px] text-fg-muted">Sem de-para no Sankhya para este código. A referência do fornecedor sugere o produto {item.identificacao.sugestoes.join(', ')}. É só uma sugestão: não entrou na conferência e precisa ser confirmada.</p>
@@ -140,6 +156,27 @@ export default function ConferenciaPedidos({ resultado, origem }: { resultado: R
         {origem && <p className="text-[12.5px] text-fg-subtle">Fonte: {origem}.</p>}
         <p className="flex items-center gap-2 text-[12.5px] text-fg-muted"><ShieldCheck size={16} className="text-fg-subtle" /> Somente leitura: nada foi gravado no Sankhya. A confirmação da nota é sempre manual, no Sankhya.</p>
       </div>
+
+      {resultado.classificacao && (
+        <div className="cartao p-5 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-medium text-fg-muted">Resultado da validação</span>
+            <Badge variant={CLASSES[resultado.classificacao]?.variante ?? 'neutral'}>{CLASSES[resultado.classificacao]?.rotulo ?? resultado.classificacao}</Badge>
+          </div>
+          {resultado.justificativa && <p className="text-[13.5px] text-fg">{resultado.justificativa}</p>}
+          {resultado.intervencaoHumana && resultado.intervencaoHumana.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="flex items-center gap-2 text-[13px] font-medium text-fg-muted"><UserCheck size={16} className="text-fg-subtle" /> Exige intervenção humana</span>
+              <ul className="list-disc pl-5 text-[13px] text-fg flex flex-col gap-1">{resultado.intervencaoHumana.map((m) => <li key={m.codigo}>{m.texto}</li>)}</ul>
+            </div>
+          )}
+          <dl className="grid grid-cols-1 md:grid-cols-3 gap-x-5 gap-y-2 text-[12.5px]">
+            <div><dt className="text-fg-subtle">Chave de acesso</dt><dd className="text-fg tabular-nums break-all">{resultado.documento.chave || '—'}</dd></div>
+            <div><dt className="text-fg-subtle">CNPJ do emitente</dt><dd className="text-fg tabular-nums">{resultado.documento.cnpjEmitente || '—'}</dd></div>
+            <div><dt className="text-fg-subtle">CNPJ do destinatário</dt><dd className="text-fg tabular-nums">{resultado.documento.cnpjDestinatario || '—'}</dd></div>
+          </dl>
+        </div>
+      )}
 
       {resultado.alertas.map((a, i) => <Aviso key={`${a.tipo}-${i}`} tipo={a.tipo === 'JA_EXISTE_NO_ERP' ? 'danger' : 'warning'}>{a.mensagem}</Aviso>)}
 

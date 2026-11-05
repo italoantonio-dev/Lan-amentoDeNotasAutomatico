@@ -135,4 +135,43 @@ const copia = JSON.stringify(entrada);
 const a1 = JSON.stringify(conferir(entrada));
 conf('21 mesma entrada, mesma saida; entrada intacta', a1 === JSON.stringify(conferir(entrada)) && copia === JSON.stringify(entrada));
 
+
+// 22. Classificacao final (etapa B10): segura, ambigua, incompativel ou sem pedido
+const cl = (x) => x.classificacao;
+const pede = (x, c) => x.intervencaoHumana.some((m) => m.codigo === c);
+r = rodar([item()], [pedido(1001, [linha()])]);
+conf('22a pedido unico correto: SEGURA, sem intervencao', cl(r) === 'SEGURA' && r.intervencaoHumana.length === 0 && /único pedido/.test(r.justificativa), cl(r));
+r = rodar([item()], [pedido(1001, [linha()]), pedido(1002, [linha()])]);
+conf('22b varios pedidos semelhantes: AMBIGUA, nao escolhe', cl(r) === 'AMBIGUA' && pede(r, 'ESCOLHER_PEDIDO') && r.pedidos.length === 2, cl(r));
+r = rodar([item({ quantidade: 4 })], [pedido(1001, [linha({ QTDENTREGUE: 6 })], { vinculos: [{ NUNOTA: 5, SEQUENCIAORIG: 1, QTDATENDIDA: 6 }] })]);
+conf('22c pedido parcialmente faturado: SEGURA com o faturamento anterior visivel', cl(r) === 'SEGURA' && r.pedidos[0].jaFaturadoParcialmente && r.itens[0].linhas[0].saldoAposDocumento === 0, cl(r));
+r = rodar([item(), item({ nItem: 2, cProd: 'XYZ-9' })], [pedido(1001, [linha()]), pedido(1002, [linha({ CODPROD: 600 })])]);
+conf('22d nota com itens em varios pedidos: SEGURA, MULTIPLOS_PEDIDOS', cl(r) === 'SEGURA' && r.situacao === 'MULTIPLOS_PEDIDOS', `${cl(r)} ${r.situacao}`);
+r = rodar([item({ quantidade: 15 })], [pedido(1001, [linha()]), pedido(1002, [linha()])]);
+conf('22e item que so cabe dividido entre pedidos: AMBIGUA com rateio', cl(r) === 'AMBIGUA' && pede(r, 'RATEAR_ENTRE_PEDIDOS'), cl(r));
+r = rodar([item({ cProd: 'NAO-EXISTE' })], [pedido(1001, [linha()])]);
+conf('22f produto nao identificado: INCOMPATIVEL, pede o produto', cl(r) === 'INCOMPATIVEL' && pede(r, 'IDENTIFICAR_PRODUTO'), cl(r));
+r = rodar([item({ quantidade: 11 })], [pedido(1001, [linha()])]);
+conf('22g quantidade acima do saldo: INCOMPATIVEL', cl(r) === 'INCOMPATIVEL' && pede(r, 'CONFERIR_QUANTIDADE'), cl(r));
+r = rodar([item({ valorUnitario: 5.01 })], [pedido(1001, [linha()])]);
+conf('22h divergencia de preco de R$ 0,01: INCOMPATIVEL (sem tolerancia)', cl(r) === 'INCOMPATIVEL' && pede(r, 'CONFERIR_PRECO'), cl(r));
+r = rodar([item()], [pedido(1001, [linha()])], { existentes: [{ NUNOTA: 77, MOTIVO: 'CHAVE' }] });
+conf('22i documento duplicado: INCOMPATIVEL, com a nota existente', cl(r) === 'INCOMPATIVEL' && pede(r, 'CONFERIR_DUPLICIDADE') && r.duplicidade[0].NUNOTA === 77, cl(r));
+r = rodar([item()], []);
+conf('22j sem pedido: SEM_PEDIDO', cl(r) === 'SEM_PEDIDO', cl(r));
+r = rodar([item({ unidade: 'PC' })], [pedido(1001, [linha()])]);
+conf('22k unidade diferente: INCOMPATIVEL, sem converter', cl(r) === 'INCOMPATIVEL' && pede(r, 'CONFERIR_UNIDADE'), cl(r));
+r = rodar([item({ xPed: '1001', nItemPed: '1' })], [pedido(1001, [linha()])]);
+conf('22l referencia do XML confere com o pedido (pelo NUNOTA)', cl(r) === 'SEGURA' && r.itens[0].referenciaPedido.confereCom[0] === 1001, cl(r));
+r = rodar([item({ xPed: '1' })], [pedido(1001, [linha()])]);
+conf('22m referencia confere tambem pelo numero do pedido (NUMNOTA)', r.itens[0].referenciaPedido.confereCom[0] === 1001);
+r = rodar([item({ xPed: '4444' })], [pedido(1001, [linha()])]);
+conf('22n referencia diferente so aparece: nao muda a classificacao (historico: nao e o numero do pedido)', cl(r) === 'SEGURA' && r.itens[0].referenciaPedido.confereCom.length === 0, cl(r));
+r = rodar([item({ xPed: '1001' })], [pedido(1001, [linha()]), pedido(1002, [linha()])]);
+conf('22o referencia nao desfaz a ambiguidade sozinha: continua AMBIGUA', cl(r) === 'AMBIGUA' && r.itens[0].referenciaPedido.confereCom.includes(1001), cl(r));
+r = rodar([item({ valorTotal: 50, valorDesconto: 5 })], [pedido(1001, [linha()])]);
+conf('22p desconto aparece com o preco liquido, sem mudar a comparacao', r.itens[0].linhas[0].precoLiquidoDocumento === 4.5 && r.itens[0].descontoDocumento === 5 && cl(r) === 'SEGURA');
+r = conferir({ documento: { itens: [item()] }, empresas: [], parceiros: PARCEIROS, dePara: DEPARA, referencias: [], pedidos: [], existentes: [] });
+conf('22q sem empresa: INCOMPATIVEL por cadastro', cl(r) === 'INCOMPATIVEL' && pede(r, 'CADASTRO'));
+
 encerrar('Motor de correspondencia');

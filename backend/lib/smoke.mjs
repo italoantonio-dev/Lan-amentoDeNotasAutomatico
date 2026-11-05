@@ -73,7 +73,14 @@ export const EMPRESA_TESTE = { CODEMP: 999901, NOME: 'ZZ TESTE AUTOMATIZADO - NA
 export const TIPO_TESTE = { CODIGO: 'ZZ_TESTE_FIN', DESCRICAO: 'ZZ Teste automatizado - nao usar' };
 let isolado = null;
 
+// Lancamento de teste so nasce na empresa de teste: nenhum smoke cria lancamento em empresa real.
+const CRIAM_LANCAMENTO = new Set(['criarLancamentoViaChat', 'criarLancamento', 'criarDocumento']);
 export async function barrarParametroReal(nome, input) {
+  if (CRIAM_LANCAMENTO.has(nome)) {
+    if (!isolado) throw new Error(`${nome} recusado: smoke sem isolamento nao cria lancamento.`);
+    if (Number(input.empresaId) !== isolado.empresa.ID) throw new Error(`${nome} recusado: empresa ${input.empresaId} e real.`);
+    return;
+  }
   if (nome !== 'salvarParametro' && nome !== 'excluirParametro') return;
   if (!isolado) throw new Error(`${nome} recusado: smoke sem isolamento nao grava parametro.`);
   let { empresaId, tipoId } = input;
@@ -82,7 +89,7 @@ export async function barrarParametroReal(nome, input) {
     if (!p) return;
     empresaId = p.EMPRESA_ID; tipoId = p.TIPO_DOCUMENTO_ID;
   }
-  if (Number(empresaId) !== isolado.empresa.ID && Number(tipoId) !== isolado.tipoFinanceiro.ID) {
+  if (Number(empresaId) !== isolado.empresa.ID) {
     throw new Error(`${nome} recusado: empresa ${empresaId} e tipo ${tipoId} sao reais.`);
   }
 }
@@ -107,15 +114,16 @@ export async function removerDadosTeste() {
 // O que os smokes nao podem mudar. Compara o conteudo inteiro, inclusive CRIADO_EM.
 async function fotografarReais() {
   const { emp, tip } = await idsTeste();
-  const [parametros, aprovadores, escopos, perfis, config, envios] = await Promise.all([
+  const [parametros, aprovadores, escopos, perfis, config, permissoes, envios] = await Promise.all([
     consulta(`SELECT * FROM PARAMETROS_LANCAMENTO WHERE EMPRESA_ID <> ${emp} AND TIPO_DOCUMENTO_ID <> ${tip} ORDER BY ID`),
     consulta('SELECT * FROM APROVADORES ORDER BY ID'),
     consulta('SELECT * FROM APROVADOR_ESCOPO ORDER BY ID'),
     consulta('SELECT PROFILEID, USERID FROM INT_PROFILEUSER WHERE PROFILEID > 0 ORDER BY PROFILEID, USERID'),
     consulta('SELECT CHAVE, VALOR FROM ROBO_CONFIG ORDER BY CHAVE'),
+    consulta('SELECT USUARIO_ID, TODOS_OS_TIPOS FROM PERMISSOES_USUARIO WHERE USUARIO_ID <> 999999 ORDER BY USUARIO_ID'),
     consulta('SELECT COUNT(*) AS N FROM ERP_ENVIO'),
   ]);
-  return JSON.stringify({ parametros, aprovadores, escopos, perfis, config, envios });
+  return JSON.stringify({ parametros, aprovadores, escopos, perfis, config, permissoes, envios });
 }
 
 export async function abrirIsolamento() {
@@ -149,25 +157,14 @@ export async function tipo(codigo) {
   return (await consulta(`SELECT ID, CODIGO, TIPMOV_ESPERADO, DESTINO_PADRAO FROM TIPOS_DOCUMENTO WHERE CODIGO = '${codigo}'`))[0];
 }
 
-// Copia de uma SF com outro perfil de administrador: prova a recusa a quem nao e administrador
-// sem mexer no perfil real, porque a plataforma nao oferece retirar usuario de perfil.
+// Copia de uma SF rodando como usuario ficticio, sem perfil: prova a recusa a quem nao e administrador
+// sem criar perfil nem tocar em usuario real.
 export async function comPerfilTemporario(fn) {
-  const nomePerfil = `ZZ Smoke ${Date.now()}`;
-  await sdk.createProfileMitra({ projectId, name: nomePerfil });
-  const lista = (await sdk.listProfilesMitra({ projectId })).result;
-  const temp = lista.find((p) => p.name === nomePerfil);
-  const usuarios = await consulta('SELECT ID FROM INT_USER WHERE ID > 0');
-  const eu = (await consulta('SELECT 1 AS X FROM DUAL')) && (await ex('chatUsuarioAtual')).rows[0].ID;
-  const outro = usuarios.find((u) => Number(u.ID) !== Number(eu));
   const criadas = [];
-  const { Administrador: adminReal } = await garantirPerfis();
   try {
-    if (!outro) throw new Error('Precisa de um segundo usuario no projeto para este teste.');
-    await sdk.setProfileUsersMitra({ projectId, profileId: temp.id, userIds: [outro.ID] });
     const copiar = async (nome) => {
-      const mapa = await carregarSFs();
-      const orig = await sdk.readServerFunctionMitra({ projectId, serverFunctionId: mapa.get(nome) });
-      const code = String(orig.result.code).replaceAll(`PROFILEID = ${adminReal}`, `PROFILEID = ${temp.id}`);
+      const orig = await sdk.readServerFunctionMitra({ projectId, serverFunctionId: (await carregarSFs()).get(nome) });
+      const code = String(orig.result.code).replaceAll(':VAR_USER', '999999');
       const c = await sdk.createServerFunctionMitra({ projectId, name: `zz_${nome}_${Date.now()}`, type: 'SQL', code, description: 'copia temporaria de smoke' });
       criadas.push(c.result.serverFunctionId);
       return async (input) => {
@@ -178,7 +175,6 @@ export async function comPerfilTemporario(fn) {
     await fn(copiar);
   } finally {
     for (const id of criadas) await sdk.deleteServerFunctionMitra({ projectId, serverFunctionId: id }).catch(() => {});
-    await sdk.deleteProfileMitra({ projectId, profileId: temp.id }).catch(() => {});
   }
 }
 
@@ -195,19 +191,16 @@ export async function criarLancamentoTeste(extra = {}) {
 }
 export const limparLancamento = (id) => ex('excluirLancamento', { id }).catch(() => null);
 
-// Copias das SFs de decisao trocando o perfil Aprovador real por um temporario. O perfil temporario
-// (com ou sem quem roda) e apagado no fim; o perfil real e seus usuarios nao sao tocados.
+// Copias das SFs de decisao em que a checagem do perfil Aprovador vira verdadeira (comigo) ou falsa.
+// Nenhum usuario real e colocado em perfil; o perfil real e seus usuarios nao sao tocados.
 export async function comAprovadorTemporario(comigo, fn) {
-  const nomePerfil = `ZZ Smoke Aprovador ${Date.now()}`;
-  await sdk.createProfileMitra({ projectId, name: nomePerfil });
-  const temp = (await sdk.listProfilesMitra({ projectId })).result.find((p) => p.name === nomePerfil);
   const { Aprovador: real } = await garantirPerfis();
+  const perfil = `EXISTS (SELECT 1 FROM INT_PROFILEUSER PAP WHERE PAP.USERID = :VAR_USER AND PAP.PROFILEID = ${real})`;
   const criadas = [];
   try {
-    if (comigo) await sdk.setProfileUsersMitra({ projectId, profileId: temp.id, userIds: [Number((await ex('chatUsuarioAtual')).rows[0].ID)] });
     const copiar = async (nome) => {
       const orig = await sdk.readServerFunctionMitra({ projectId, serverFunctionId: (await carregarSFs()).get(nome) });
-      const code = String(orig.result.code).replaceAll(`PAP.PROFILEID = ${real}`, `PAP.PROFILEID = ${temp.id}`);
+      const code = String(orig.result.code).replaceAll(perfil, comigo ? '(1 = 1)' : '(1 = 0)');
       if (code === orig.result.code) throw new Error(`${nome} nao cita o perfil Aprovador`);
       const c = await sdk.createServerFunctionMitra({ projectId, name: `zz_${nome}_${Date.now()}`, type: 'SQL', code, description: 'copia temporaria de smoke' });
       criadas.push(c.result.serverFunctionId);
@@ -222,6 +215,23 @@ export async function comAprovadorTemporario(comigo, fn) {
     await fn(copiar);
   } finally {
     for (const id of criadas) await sdk.deleteServerFunctionMitra({ projectId, serverFunctionId: id }).catch(() => {});
-    await sdk.deleteProfileMitra({ projectId, profileId: temp.id }).catch(() => {});
   }
+}
+
+// Copia de uma SF SQL que roda como outro usuario (ficticio): :VAR_USER vira o id informado.
+// Prova regras por usuario sem alterar configuracao de nenhum usuario real. Apague com a funcao devolvida.
+export async function copiaComoUsuario(nome, usuarioId) {
+  const orig = await sdk.readServerFunctionMitra({ projectId, serverFunctionId: (await carregarSFs()).get(nome) });
+  const code = String(orig.result.code).replaceAll(':VAR_USER', String(Number(usuarioId)));
+  const c = await sdk.createServerFunctionMitra({ projectId, name: `zz_${nome}_${Date.now()}`, type: 'SQL', code, description: 'copia temporaria de smoke' });
+  const id = c.result.serverFunctionId;
+  const rodar = async (input) => {
+    await pausa(ESPACO_MS);
+    const r = await sdk.executeServerFunctionMitra({ projectId, serverFunctionId: id, input: { ...input, _nonce: `${Date.now()}-${++n}` } });
+    if (r.result.executionStatus === 'FAILED') throw new Error(`${nome} (copia): ${JSON.stringify(r.result.error)}`);
+    const o = typeof r.result.output === 'string' ? JSON.parse(r.result.output) : r.result.output;
+    return o.rows ?? [];
+  };
+  rodar.apagar = () => sdk.deleteServerFunctionMitra({ projectId, serverFunctionId: id }).catch(() => {});
+  return rodar;
 }

@@ -44,7 +44,7 @@ const pelaNota = cadastradas.filter((e) => destinatarios.includes(soDigitos(e.CN
 const empresas = pelaNota.length ? pelaNota : (!destinatarios.length && empresaDoLancamento ? [empresaDoLancamento] : []);
 const documento = {
   chave: lido.chave || '', numero: lido.numero || '', serie: lido.serie || '', dataEmissao: lido.dataEmissao || '', cnpjEmitente: soDigitos(lido.cnpjEmitente), cnpjDestinatario: destinatarios[0] || '', valorTotal: Number(lido.valorTotal) || 0,
-  itens: (lido.itens || []).slice(0, 990).map((i) => ({ nItem: i.nItem, cProd: i.cProd || '', cEAN: i.cEAN || '', xProd: i.descricao || '', quantidade: i.quantidade, unidade: i.unidade || '', valorUnitario: i.valorUnitario, valorTotal: i.valorTotal, codprod: inteiro(i.codprod) })),
+  itens: (lido.itens || []).slice(0, 990).map((i) => ({ nItem: i.nItem, cProd: i.cProd || '', cEAN: i.cEAN || '', xProd: i.descricao || '', quantidade: i.quantidade, unidade: i.unidade || '', valorUnitario: i.valorUnitario, valorTotal: i.valorTotal, codprod: inteiro(i.codprod), xPed: i.xPed || "", nItemPed: i.nItemPed || "", valorDesconto: Number(i.valorDesconto) || 0 })),
 };
 let dados = { parceiros: [], dePara: [], referencias: [], pedidos: [], existentes: [], alertasLeitura: [] };
 try {
