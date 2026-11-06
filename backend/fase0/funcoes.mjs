@@ -44,6 +44,8 @@ export const JS_COM_ERP = {
   erpVerificarConexao: { arquivos: [...BASE, 'sf/erpVerificarConexao.js'] },
   sankhyaProdutos: { arquivos: [...BASE, 'sf/sankhyaProdutos.js'] },
   sankhyaCidades: { arquivos: [...BASE, 'sf/sankhyaCidades.js'] },
+  gruposSankhya: { arquivos: [...BASE, 'sf/gruposSankhya.js'], nova: true, description: 'Grupos de usuarios do Sankhya com o numero de usuarios ativos e com e-mail. Somente leitura, somente administrador.' },
+  sincronizarUsuariosSankhya: { arquivos: [...BASE, 'sf/sincronizarUsuariosSankhya.js'], nova: true, description: 'Liga os logins do modulo aos usuarios do Sankhya pelo e-mail e acrescenta o perfil do grupo, pelo mapa do administrador. Le o Sankhya sem gravar. Somente administrador; atribuir perfil exige desenvolvedor.' },
 };
 
 // Indicadores da Caixa de entrada: o robo deixou de lancar; conta o que ficou pronto para conferencia.

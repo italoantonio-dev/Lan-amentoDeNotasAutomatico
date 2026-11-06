@@ -14,6 +14,7 @@ import CadastroTab from './config/CadastroTab';
 import ParametrosTab from './config/ParametrosTab';
 import AprovadoresTab from './config/AprovadoresTab';
 import PermissoesTab from './config/PermissoesTab';
+import SankhyaAcessoTab from './config/SankhyaAcessoTab';
 
 type Linha = Record<string, any>;
 
@@ -26,6 +27,7 @@ const ABAS = [
   { id: 'parametros', rotulo: 'Parâmetros' },
   { id: 'aprovadores', rotulo: 'Aprovadores' },
   { id: 'permissoes', rotulo: 'Permissões' },
+  { id: 'acesso-sankhya', rotulo: 'Acesso pelo Sankhya' },
 ];
 
 const CADASTROS: Record<string, { listar: number; criar: number; atualizar: number; excluir: number; rotulo: string; colCodigo: string; rotuloCodigo: string; colDescricao: string; codigoNumerico: boolean; extras: { col: string; param: string; rotulo: string }[] }> = {
@@ -110,6 +112,7 @@ export default function ConfiguracaoPage() {
       {aba === 'parametros' && <ParametrosTab key={versao} onAviso={addToast} />}
       {aba === 'aprovadores' && <AprovadoresTab onAviso={addToast} />}
       {aba === 'permissoes' && <PermissoesTab perm={perm} onAviso={addToast} />}
+      {aba === 'acesso-sankhya' && <SankhyaAcessoTab isDev={perm.isDev} onAviso={addToast} />}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
