@@ -2,6 +2,7 @@
 // URL, usuario e schema ficam na conexao, nunca aqui.
 const SLUG_ERP = 'sankhya';
 const EP_CONSULTA = '/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json';
+const EP_INCLUIR_NOTA = '/gateway/v1/mgecom/service.sbr?serviceName=CACSP.incluirNota&outputType=json';
 const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.saveRecord&outputType=json';
 
 // Gravacao LIGADA na conexao de producao por autorizacao escrita do usuario em 06/11/2026, que assumiu
@@ -9,6 +10,9 @@ const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.s
 // banco ou de input muda isto: desligar e voltar esta linha para false e publicar as SFs de novo.
 const GRAVACAO_ERP_HABILITADA = true;
 const ENTIDADES_GRAVAVEIS = ['Financeiro'];
+// Lancar PEDIDO de compra (TIPMOV O), nunca confirmado: rotina de pedido autorizada em 06/11/2026.
+// Pedido nao e nota: a trava de criacao de nota segue valendo para TIPMOV C.
+const LANCAMENTO_PEDIDO_HABILITADO = true;
 // Alterar cadastro de parceiro no ERP nao entrou na autorizacao.
 const CORRECAO_CADASTRO_HABILITADA = false;
 // Criacao de nota: proibicao TEMPORARIA, separada da trava geral. So religa com servico oficial
@@ -20,6 +24,7 @@ const ENTIDADES_DE_NOTA = ['CabecalhoNota', 'ItemNota'];
 const SERVICOS_ERP = {
   'DbExplorerSP.executeQuery': { endpoint: EP_CONSULTA, leitura: true },
   'CRUDServiceProvider.saveRecord': { endpoint: EP_SALVAR, leitura: false },
+  'CACSP.incluirNota': { endpoint: EP_INCLUIR_NOTA, leitura: false, pedido: true },
 };
 // Regra PERMANENTE: o sistema nunca confirma nota. Vale com qualquer trava ligada.
 const SERVICO_DE_CONFIRMACAO = /confirm/i;
@@ -32,7 +37,7 @@ function erroBloqueio(codigo, mensagem) {
   e.codigo = codigo;
   return e;
 }
-const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA', 'ENTIDADE_NAO_LIBERADA'].includes(e.codigo);
+const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA', 'ENTIDADE_NAO_LIBERADA', 'PEDIDO_BLOQUEADO'].includes(e.codigo);
 
 function exigirSqlDeLeitura(sql) {
   const semTexto = String(sql || '').replace(/'(?:[^']|'')*'/g, "''");
@@ -51,11 +56,19 @@ async function erpChamar(servico, requestBody) {
   if (!s.leitura && !GRAVACAO_ERP_HABILITADA) {
     throw erroBloqueio('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya.');
   }
+  if (s.pedido) {
+    // Inclusao so de pedido de compra: cabecalho com TIPMOV O, sem confirmar. Nota de compra (C) para aqui.
+    const cab = requestBody && requestBody.nota && requestBody.nota.cabecalho;
+    const tipmov = cab && cab.TIPMOV && cab.TIPMOV.$;
+    if (!LANCAMENTO_PEDIDO_HABILITADO || tipmov !== 'O') {
+      throw erroBloqueio('PEDIDO_BLOQUEADO', 'Inclusão no ERP liberada só para pedido de compra: nada foi enviado ao Sankhya.');
+    }
+  }
   const entidade = requestBody && requestBody.dataSet && requestBody.dataSet.rootEntity;
   if (!s.leitura && ENTIDADES_DE_NOTA.includes(entidade) && !CRIACAO_NOTA_HABILITADA) {
     throw erroBloqueio('CRIACAO_NOTA_BLOQUEADA', 'Criação de nota no ERP bloqueada até existir serviço oficial homologado e autorização explícita.');
   }
-  if (!s.leitura && !ENTIDADES_GRAVAVEIS.includes(entidade)) {
+  if (!s.leitura && !s.pedido && !ENTIDADES_GRAVAVEIS.includes(entidade)) {
     throw erroBloqueio('ENTIDADE_NAO_LIBERADA', 'Gravação no ERP liberada só para título financeiro: nada foi enviado ao Sankhya.');
   }
   if (s.leitura) exigirSqlDeLeitura(requestBody && requestBody.sql);
@@ -135,4 +148,17 @@ async function parceirosPorCnpj(cnpj) {
   return erpConsulta(
     "SELECT CODPARC, NOMEPARC, RAZAOSOCIAL, CGC_CPF, FORNECEDOR, CLIENTE, ATIVO FROM TGFPAR WHERE CGC_CPF = '" + d + "' AND ATIVO = 'S' ORDER BY CODPARC",
   );
+}
+
+// Pedido de compra pelo servico de inclusao do Sankhya: calcula impostos pela TOP e pelo produto,
+// como na tela. Devolve o NUNOTA. Nunca confirma.
+async function erpIncluirPedido(cabecalho, itens) {
+  const campos = (o) => { const r = {}; for (const k of Object.keys(o)) if (o[k] !== null && o[k] !== undefined && o[k] !== '') r[k] = { $: String(o[k]) }; return r; };
+  const r = await erpChamar('CACSP.incluirNota', {
+    nota: { cabecalho: Object.assign({ NUNOTA: { $: '' } }, campos(Object.assign({}, cabecalho, { TIPMOV: 'O' }))), itens: { INFORMARPRECO: 'True', item: itens.map((i) => Object.assign({ NUNOTA: { $: '' } }, campos(i))) } },
+  });
+  const b = lerResposta(r);
+  const nunota = b.responseBody && b.responseBody.pk && b.responseBody.pk.NUNOTA && b.responseBody.pk.NUNOTA.$;
+  if (!nunota) throw new Error('O ERP aceitou o pedido mas não devolveu o número único.');
+  return nunota;
 }

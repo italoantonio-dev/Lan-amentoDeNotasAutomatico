@@ -15,6 +15,7 @@ import ParametrosTab from './config/ParametrosTab';
 import AprovadoresTab from './config/AprovadoresTab';
 import PermissoesTab from './config/PermissoesTab';
 import SankhyaAcessoTab from './config/SankhyaAcessoTab';
+import RotinaPedidoTab from './config/RotinaPedidoTab';
 
 type Linha = Record<string, any>;
 
@@ -26,6 +27,7 @@ const ABAS = [
   { id: 'contas', rotulo: 'Contas' },
   { id: 'parametros', rotulo: 'Parâmetros' },
   { id: 'aprovadores', rotulo: 'Aprovadores' },
+  { id: 'rotina-pedido', rotulo: 'Rotina de pedidos' },
   { id: 'permissoes', rotulo: 'Permissões' },
   { id: 'acesso-sankhya', rotulo: 'Acesso pelo Sankhya' },
 ];
@@ -112,6 +114,7 @@ export default function ConfiguracaoPage() {
       {aba === 'parametros' && <ParametrosTab key={versao} onAviso={addToast} />}
       {aba === 'aprovadores' && <AprovadoresTab onAviso={addToast} />}
       {aba === 'permissoes' && <PermissoesTab perm={perm} onAviso={addToast} />}
+      {aba === 'rotina-pedido' && <RotinaPedidoTab onAviso={addToast} />}
       {aba === 'acesso-sankhya' && <SankhyaAcessoTab isDev={perm.isDev} onAviso={addToast} />}
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>

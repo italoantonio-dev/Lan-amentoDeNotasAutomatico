@@ -37,3 +37,19 @@
 | MD-1/2c | Classificação do motor, validação retrospectiva, tela e isolamento dos testes | ✅ aguarda revisão | modulo-documental/validacao-classificacao.md, parametros/seguranca-contas.md |
 | MD-PA | Piloto assistido somente leitura (20 NF-e ou 5 dias úteis) | ✅ preparado, aguardando documentos | modulo-documental/piloto-operacao.md |
 | MD-3/4/5 | Faturamento, piloto e expansão | ⛔ não autorizadas | — |
+
+## Rotina de pedido e pendências (pedido em 06/11/2026: "vamos fazer tudo")
+
+| # | Task | Status | Output |
+|---|------|--------|--------|
+| RP-1 | Configuração por empresa (TOP pedido/faturamento, tipo de venda, local, ADM) | ✅ done | Configurações → Rotina de pedidos |
+| RP-2 | Robô e botão lançam pedido 1314 não confirmado (CACSP.incluirNota, só TIPMOV O) | ✅ done, desligado até configurar | sf/lancarPedidoErp.js |
+| RP-3 | Ler confirmação do ADM e liberação no Sankhya (TSILIB evento 44) | ⏳ pending | |
+| RP-4 | Faturar depois da liberação, sem confirmar, com número da NF-e | ⏳ pending | validar NUMNOTA na base de teste |
+| RP-5 | Anexo PDF/XML na nota: link para o módulo (upload depende da plataforma) | ⏳ pending | decisão do usuário |
+| RP-6 | NFS-e e PDF sem itens: produto padrão por fornecedor ou manual | ⏳ pending | decisão do usuário |
+| RP-7 | Conferência de NFS-e: "Não se aplica" | ⏳ pending | |
+| AC-1 | Acesso pelo usuário e grupo do Sankhya | ✅ done | Configurações → Acesso pelo Sankhya |
+| AC-2 | Escopo por loja a partir da empresa do Sankhya | ⏳ pending | |
+| AC-3 | Função só de conferência para o agente de IA | ⏳ pending | |
+| EX-1 | Senha da frota@, proteção de perfis nas telas, aprovadores reais, dúvidas V-05/V-07 | ⛔ externo | TI, admin do workspace, Diretoria |

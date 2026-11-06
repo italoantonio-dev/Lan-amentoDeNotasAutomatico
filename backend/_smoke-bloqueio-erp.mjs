@@ -135,7 +135,7 @@ const adaptador = desligada(await montarJS('sf/_comum.js', 'sf/_erp.js'));
     await tentar('saveDireto', () => erpChamar('CRUDServiceProvider.saveRecord', {}));
     await tentar('confirmar', () => erpChamar('CACSP.confirmarNota', {}));
     await tentar('confirmarMaiusculo', () => erpChamar('SERVICOSNFESP.CONFIRM', {}));
-    await tentar('outroServico', () => erpChamar('CACSP.incluirNota', {}));
+    await tentar('outroServico', () => erpChamar('CACSP.alterarNota', {}));
     await tentar('proto', () => erpChamar('__proto__', {}));
     await tentar('constructor', () => erpChamar('constructor', {}));
     return resultado;`;
@@ -299,6 +299,20 @@ async function rodadaDoRobo(codEnvio, destino) {
     return out;`;
   const r = await a.rodar(sonda);
   conf('liberado: porta unica recusa o que nao e titulo e a confirmacao', r.Parceiro === 'ENTIDADE_NAO_LIBERADA' && r.Outra === 'ENTIDADE_NAO_LIBERADA' && r.CabecalhoNota === 'CRIACAO_NOTA_BLOQUEADA' && r.ItemNota === 'CRIACAO_NOTA_BLOQUEADA' && r.c === 'CONFIRMACAO_PROIBIDA' && a.gravacoes().length === 0, JSON.stringify(r));
+}
+
+{
+  const a = ambiente();
+  const sonda = `${await montarJS('sf/_comum.js', 'sf/_erp.js')}
+    const out = {};
+    for (const t of ['C', 'V', '']) { try { await erpChamar('CACSP.incluirNota', { nota: { cabecalho: { TIPMOV: { $: t } }, itens: {} } }); out[t || 'vazio'] = 'PASSOU'; } catch (x) { out[t || 'vazio'] = x.codigo; } }
+    const antes = 0;
+    try { await erpIncluirPedido({ CODEMP: 1, TIPMOV: 'C' }, [{ CODPROD: 1 }]); out.O = 'PASSOU'; } catch (x) { out.O = x.codigo || x.message; }
+    return out;`;
+  const r = await a.rodar(sonda);
+  const g = a.gravacoes();
+  conf('pedido: inclusao recusa nota de compra e outros movimentos', r.C === 'PEDIDO_BLOQUEADO' && r.V === 'PEDIDO_BLOQUEADO' && r.vazio === 'PEDIDO_BLOQUEADO', JSON.stringify(r));
+  conf('pedido: erpIncluirPedido sempre manda TIPMOV O e o teste enxerga', g.length === 1 && g[0].body.requestBody.nota.cabecalho.TIPMOV.$ === 'O', JSON.stringify(r));
 }
 
 // B7. Prova inversa: as travas sao independentes e o teste enxerga gravacao.

@@ -122,6 +122,23 @@ export default function LancamentoDetalhePage() {
   }
 
   // Conferencia da NF-e com os pedidos: so leitura, disponivel em qualquer situacao do lancamento.
+  const [pedido, setPedido] = useState<{ nunota: number | null; ativa: boolean } | null>(null);
+  const [lancandoPedido, setLancandoPedido] = useState(false);
+  useEffect(() => {
+    if (!l || l.TIPO !== 'NOTA_FISCAL') return;
+    umaLinha(SF.rotinaPedidoDoLancamento, { id: Number(l.ID) })
+      .then((r) => setPedido(r ? { nunota: Number(r.PEDIDO_NUNOTA) || null, ativa: Number(r.ATIVO) === 1 } : null))
+      .catch(() => setPedido(null));
+  }, [l]);
+  async function lancarPedido() {
+    setLancandoPedido(true);
+    try {
+      const r = await execSF<{ ok: boolean; nunota?: number; mensagem?: string }>(SF.lancarPedidoErp, { lancamentoId: Number(l?.ID) });
+      if (r.ok) { addToast('success', r.mensagem ?? 'Pedido lançado.'); setPedido({ nunota: r.nunota ?? null, ativa: true }); }
+      else addToast('error', r.mensagem ?? 'O pedido não foi lançado.');
+    } catch (e) { addToast('error', getMitraErrorMessage(e)); } finally { setLancandoPedido(false); }
+  }
+
   async function conferirNota() {
     setConferindoNota(true);
     try {
@@ -252,6 +269,12 @@ export default function LancamentoDetalhePage() {
               <div className="px-5 py-5 flex flex-col gap-3">
                 <p className="text-[13px] text-fg-muted">Compara a nota com os pedidos de compra: candidatos, quantidades, preços, vínculos e divergências. Somente leitura: não cria nota, não altera pedido e não gera provisão.</p>
                 <Button variant="secondary" disabled={conferindoNota} onClick={conferirNota}><SearchCheck size={16} /> {conferindoNota ? 'Conferindo...' : 'Conferir com pedidos'}</Button>
+                {pedido?.nunota === -1 && <Aviso tipo="warning">O lançamento do pedido foi iniciado e não terminou. Confira no Sankhya antes de qualquer nova tentativa.</Aviso>}
+                {pedido?.nunota && pedido.nunota > 0 && <p className="text-[13.5px] text-fg">Pedido <strong className="font-semibold tabular-nums">{pedido.nunota}</strong> lançado no Sankhya, sem confirmar. O ADM da loja confirma e pede a liberação.</p>}
+                {pedido && !pedido.nunota && pedido.ativa && (
+                  <Button disabled={lancandoPedido} onClick={lancarPedido}><Send size={16} /> {lancandoPedido ? 'Lançando...' : 'Lançar pedido no Sankhya'}</Button>
+                )}
+                {pedido && !pedido.nunota && !pedido.ativa && <p className="text-[12.5px] text-fg-subtle">Rotina de pedido desligada para esta empresa (Configurações → Rotina de pedidos).</p>}
               </div>
             </Card>
           )}

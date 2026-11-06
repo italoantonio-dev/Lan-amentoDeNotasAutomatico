@@ -69,7 +69,17 @@ async function processarAnexo(ctx) {
   // Nota de entrada: a conferencia compara com os pedidos de compra, so lendo. Nao e erro do robo.
   if (envio && (envio.entidade === 'CorrespondenciaPedido' || envio.motivo === 'CONFERENCIA_FALHOU')) {
     const sobre = envio.ok ? 'conferida com os pedidos: ' + envio.mensagem : 'a conferência com os pedidos não terminou: ' + envio.mensagem;
-    return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada ' + sobre + ' Nada foi criado no ERP.', base);
+    // Rotina de pedido: com a rotina ligada na empresa, a nota sem pedido vira pedido NAO confirmado.
+    // A funcao decide sozinha (rotina desligada, pedido existente, produto ou unidade sem par: nao lanca).
+    let pedido = ' Nada foi criado no ERP.';
+    if (envio.ok && !simulacao) {
+      try {
+        const p = await chamar(SF.lancarPedidoErp, { lancamentoId: criado.lancamentoId });
+        if (p && p.ok && p.nunota) pedido = ' Pedido ' + p.nunota + ' lançado no Sankhya, sem confirmar: o ADM da loja confirma e pede a liberação.';
+        else if (p && p.motivo && p.motivo !== 'ROTINA_DESLIGADA') pedido = ' Pedido não lançado: ' + p.mensagem;
+      } catch (e) { pedido = ' Pedido não lançado: ' + msgErro(e); }
+    }
+    return fechar('NOTA_PEDIDO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ': nota de entrada ' + sobre + pedido, base);
   }
   if (simulacao) {
     if (envio && envio.ok) return fechar('SIMULADO', 'Confiança ' + nota.confianca + ' ≥ corte ' + corte + ' e valor dentro da alçada: estaria pronto para conferência. Na simulação nada é gravado.', base);

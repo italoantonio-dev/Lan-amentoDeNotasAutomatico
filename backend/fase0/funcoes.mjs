@@ -44,6 +44,7 @@ export const JS_COM_ERP = {
   erpVerificarConexao: { arquivos: [...BASE, 'sf/erpVerificarConexao.js'] },
   sankhyaProdutos: { arquivos: [...BASE, 'sf/sankhyaProdutos.js'] },
   sankhyaCidades: { arquivos: [...BASE, 'sf/sankhyaCidades.js'] },
+  lancarPedidoErp: { arquivos: [...BASE, 'sf/lancarPedidoErp.js'], nova: true, description: 'Lanca no Sankhya o pedido de compra da NF-e do lancamento, NAO confirmado, quando a rotina de pedido esta ligada na empresa. Recusa se ja houver pedido com saldo, produto ou unidade sem correspondencia, ou falta classificacao. Nao fatura e nao confirma. Parametro: lancamentoId (numero).' },
   gruposSankhya: { arquivos: [...BASE, 'sf/gruposSankhya.js'], nova: true, description: 'Grupos de usuarios do Sankhya com o numero de usuarios ativos e com e-mail. Somente leitura, somente administrador.' },
   sincronizarUsuariosSankhya: { arquivos: [...BASE, 'sf/sincronizarUsuariosSankhya.js'], nova: true, description: 'Liga os logins do modulo aos usuarios do Sankhya pelo e-mail e acrescenta o perfil do grupo, pelo mapa do administrador. Le o Sankhya sem gravar. Somente administrador; atribuir perfil exige desenvolvedor.' },
 };
