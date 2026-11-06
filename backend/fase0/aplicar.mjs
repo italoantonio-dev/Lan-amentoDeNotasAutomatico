@@ -2,7 +2,7 @@
 // So atualiza SFs existentes (mesmo id), cria as novas da lista, inclui as novas nos perfis e
 // atualiza o texto do agente.
 //   cd backend && node fase0/aplicar.mjs
-// Recusa publicar se alguma trava estiver ligada no fonte: este script nao serve para religar gravacao.
+// Recusa publicar com a criacao de nota ou a correcao de cadastro ligadas, ou com outra entidade liberada para gravar.
 import fs from 'node:fs';
 import path from 'node:path';
 import { sdk, projectId, sf, consulta, garantirPerfis, DIR_BACKEND } from '../lib/base.mjs';
@@ -10,7 +10,8 @@ import { INSTRUCOES_AGENTE } from '../lib/instrucoes-agente.mjs';
 import { JS_COM_ERP, SQL_ALTERADAS, codigoEsperado } from './funcoes.mjs';
 
 const fonteErp = fs.readFileSync(path.join(DIR_BACKEND, 'sf/_erp.js'), 'utf8');
-for (const trava of ['GRAVACAO_ERP_HABILITADA', 'CRIACAO_NOTA_HABILITADA']) {
+if (!/^const ENTIDADES_GRAVAVEIS = \['Financeiro'\];$/m.test(fonteErp)) throw new Error('sf/_erp.js libera gravacao alem do titulo financeiro. Publicacao recusada.');
+for (const trava of ['CORRECAO_CADASTRO_HABILITADA', 'CRIACAO_NOTA_HABILITADA']) {
   if (!new RegExp(`^const ${trava} = false;$`, 'm').test(fonteErp)) throw new Error(`sf/_erp.js nao tem "const ${trava} = false;". Publicacao recusada.`);
 }
 const manifesto = path.join(DIR_BACKEND, 'fase0/antes/manifesto.json');
@@ -23,7 +24,7 @@ for (const [nome, f] of Object.entries(JS_COM_ERP)) {
 const novas = [];
 for (const [nome, sql] of Object.entries(SQL_ALTERADAS)) {
   if (!antes.get(nome)) novas.push(nome);
-  const id = await sf(nome, 'SQL', sql, antes.get(nome)?.descricao ?? (nome === 'podeConferirNfe' ? 'Diz se o usuario logado pode conferir nota fiscal (alcance por tipo de documento)' : 'Indicadores da Caixa de entrada'));
+  const id = await sf(nome, 'SQL', sql, antes.get(nome)?.descricao ?? (nome === 'podeEnviarErp' ? 'Diz se o usuario logado pode gravar no ERP (perfil Administrador ou Aprovador)' : nome === 'podeConferirNfe' ? 'Diz se o usuario logado pode conferir nota fiscal (alcance por tipo de documento)' : 'Indicadores da Caixa de entrada'));
   console.log(`publicada ${nome} (${id})`);
 }
 for (const [nome, f] of Object.entries(JS_COM_ERP)) {

@@ -4,10 +4,13 @@ const SLUG_ERP = 'sankhya';
 const EP_CONSULTA = '/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json';
 const EP_SALVAR = '/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.saveRecord&outputType=json';
 
-// FASE 0 (modulo-documental/fase0-plano-execucao.md): gravacao no ERP desligada.
-// Nenhum parametro de tela, de banco ou de input liga a gravacao: religar exige autorizacao
-// escrita e uma mudanca revisada nesta linha, publicada de novo em todas as SFs que usam este arquivo.
-const GRAVACAO_ERP_HABILITADA = false;
+// Gravacao LIGADA na conexao de producao por autorizacao escrita do usuario em 06/11/2026, que assumiu
+// o controle dos envios. Vale so para as entidades de ENTIDADES_GRAVAVEIS. Nenhum parametro de tela, de
+// banco ou de input muda isto: desligar e voltar esta linha para false e publicar as SFs de novo.
+const GRAVACAO_ERP_HABILITADA = true;
+const ENTIDADES_GRAVAVEIS = ['Financeiro'];
+// Alterar cadastro de parceiro no ERP nao entrou na autorizacao.
+const CORRECAO_CADASTRO_HABILITADA = false;
 // Criacao de nota: proibicao TEMPORARIA, separada da trava geral. So religa com servico oficial
 // homologado (V-01, V-03) e autorizacao explicita. O caminho previsto e faturar um pedido de compra
 // existente e salvar a nota resultante NAO CONFIRMADA. Ligar esta linha nao libera confirmacao.
@@ -29,7 +32,7 @@ function erroBloqueio(codigo, mensagem) {
   e.codigo = codigo;
   return e;
 }
-const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA'].includes(e.codigo);
+const ehBloqueioErp = (e) => !!e && ['GRAVACAO_BLOQUEADA', 'CONFIRMACAO_PROIBIDA', 'SERVICO_NAO_PERMITIDO', 'SQL_NAO_E_LEITURA', 'CRIACAO_NOTA_BLOQUEADA', 'ENTIDADE_NAO_LIBERADA'].includes(e.codigo);
 
 function exigirSqlDeLeitura(sql) {
   const semTexto = String(sql || '').replace(/'(?:[^']|'')*'/g, "''");
@@ -51,6 +54,9 @@ async function erpChamar(servico, requestBody) {
   const entidade = requestBody && requestBody.dataSet && requestBody.dataSet.rootEntity;
   if (!s.leitura && ENTIDADES_DE_NOTA.includes(entidade) && !CRIACAO_NOTA_HABILITADA) {
     throw erroBloqueio('CRIACAO_NOTA_BLOQUEADA', 'Criação de nota no ERP bloqueada até existir serviço oficial homologado e autorização explícita.');
+  }
+  if (!s.leitura && !ENTIDADES_GRAVAVEIS.includes(entidade)) {
+    throw erroBloqueio('ENTIDADE_NAO_LIBERADA', 'Gravação no ERP liberada só para título financeiro: nada foi enviado ao Sankhya.');
   }
   if (s.leitura) exigirSqlDeLeitura(requestBody && requestBody.sql);
   return sdk.callIntegrationMitra({

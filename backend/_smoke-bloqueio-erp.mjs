@@ -37,7 +37,8 @@ const ocorrencias = (texto, re) => (texto.match(re) || []).length;
 // ---------------------------------------------------------------- A. Fonte
 console.log('\n--- A. Fonte ---');
 const erpJs = ler('backend/sf/_erp.js');
-conf('trava geral desligada no adaptador', /^const GRAVACAO_ERP_HABILITADA = false;$/m.test(erpJs));
+conf('gravacao ligada so para titulo financeiro', /^const GRAVACAO_ERP_HABILITADA = true;$/m.test(erpJs) && /^const ENTIDADES_GRAVAVEIS = \['Financeiro'\];$/m.test(erpJs));
+conf('correcao de cadastro desligada', /^const CORRECAO_CADASTRO_HABILITADA = false;$/m.test(erpJs));
 conf('trava temporaria de criacao de nota desligada', /^const CRIACAO_NOTA_HABILITADA = false;$/m.test(erpJs));
 conf('adaptador tem uma unica saida para a rede', ocorrencias(erpJs, /callIntegrationMitra/g) === 1);
 const sfs = arquivos('backend/sf', /\.js$/);
@@ -52,7 +53,7 @@ const foraDoAdaptador = [...sfs.filter((a) => !a.endsWith('_erp.js')), ...arquiv
 conf('nenhum servico de gravacao citado fora do adaptador', foraDoAdaptador.length === 0, foraDoAdaptador.join(', '));
 const telaComIntegracao = arquivos('frontend/src', /\.(ts|tsx)$/).filter((a) => /callIntegrationMitra/.test(ler(a)));
 conf('nenhuma tela chama a integracao direto', telaComIntegracao.length === 0, telaComIntegracao.join(', '));
-conf('tela nao oferece gravacao', /GRAVACAO_ERP_LIBERADA = false/.test(ler('frontend/src/hooks/useEnvioErp.ts')));
+conf('tela nao oferece correcao de cadastro', /CORRECAO_CADASTRO_LIBERADA = false/.test(ler('frontend/src/hooks/useEnvioErp.ts')));
 conf('robo sempre confere sem gravar', /enviarLancamentoParaErp, \{ lancamentoId: criado\.lancamentoId, simular: 'S' \}/.test(ler('backend/sf/_robo.js')));
 const scripts = arquivos('backend', /\.mjs$/).filter((a) => !a.endsWith('_smoke-bloqueio-erp.mjs'));
 const scriptsNoErp = scripts.filter((a) => /connection:\s*'sankhya'/.test(ler(a)));
@@ -110,12 +111,16 @@ const dadosEnvio = (o = {}) => ({
   ID: 1, STATUS: 'APROVADO', DESTINO_ERP: 'FINANCEIRO', DESTINO_PADRAO: 'FINANCEIRO', CODEMP: 1, CODTIPOPER: 1, CODNAT: 1, CODCENCUS: 1, CODCTABCO: 1, CODTIPTIT: 1, CODPARC: 10,
   CNPJ_FORNECEDOR: '11222333000181', NUMERO_DOC: '123', SERIE: '1', DATA_EMISSAO: '2026-01-10', DATA_VENCIMENTO: '2026-02-10', VALOR_TOTAL: 100, TIPO_DESC: 'Boleto', NOME_FORNECEDOR: 'Parceiro', ENVIOS_JSON: null, ...o,
 });
-const respostasEnvio = (o) => ({ erpDadosEnvio: async () => ({ rows: [dadosEnvio(o)] }) });
+const respostasEnvio = (o) => ({ podeEnviarErp: async () => ({ rows: [{ PODE: 1 }] }), erpDadosEnvio: async () => ({ rows: [dadosEnvio(o)] }) });
 
-const codEnviar = await codigoEsperado('enviarLancamentoParaErp');
+// O bloco B prova as travas: roda com a gravacao desligada EM MEMORIA, como no recuo de emergencia.
+// A liberacao real tem bloco proprio, sobre o codigo publicado (codEnviarReal).
+const desligada = (c) => { const n = c.replace('const GRAVACAO_ERP_HABILITADA = true;', 'const GRAVACAO_ERP_HABILITADA = false;'); if (n === c) throw new Error('nao achei a liberacao no codigo'); return n; };
+const codEnviarReal = await codigoEsperado('enviarLancamentoParaErp');
+const codEnviar = desligada(codEnviarReal);
 const codCorrigir = await codigoEsperado('corrigirCadastroErp');
-const codConferir = await codigoEsperado('conferirNfePedidos');
-const adaptador = await montarJS('sf/_comum.js', 'sf/_erp.js');
+const codConferir = desligada(await codigoEsperado('conferirNfePedidos'));
+const adaptador = desligada(await montarJS('sf/_comum.js', 'sf/_erp.js'));
 
 // B1. A porta unica, chamada direto
 {
@@ -263,6 +268,39 @@ async function rodadaDoRobo(codEnvio, destino) {
   conf('nota lida pelo robo so consulta o ERP', a.gravacoes().length === 0 && a.sfs.some((x) => x.nome === 'conferirNfePedidos'));
 }
 
+
+// Liberacao real: titulo grava; o resto continua parado. Tudo com a rede simulada.
+{
+  const a = ambiente(respostasEnvio());
+  const r = await a.rodar(codEnviarReal, { lancamentoId: 1 });
+  conf('liberado: titulo com perfil grava uma vez, so Financeiro', r.ok === true && a.gravacoes().length === 1 && a.gravacoes()[0].body.requestBody.dataSet.rootEntity === 'Financeiro', r.motivo);
+}
+{
+  const a = ambiente({ ...respostasEnvio(), podeEnviarErp: async () => ({ rows: [{ PODE: 0 }] }) });
+  const r = await a.rodar(codEnviarReal, { lancamentoId: 1 });
+  conf('liberado: sem perfil recusa, sem gravar', r.motivo === 'SEM_PERMISSAO' && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente(respostasEnvio());
+  const r = await a.rodar(codEnviarReal, { lancamentoId: 1, simular: 'S' });
+  conf('liberado: conferir nao grava', r.simulado === true && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente(respostasEnvio({ DESTINO_ERP: 'NOTA' }));
+  const r = await a.rodar(codEnviarReal, { lancamentoId: 1 });
+  conf('liberado: nota continua sem gravar', r.motivo === 'CRIACAO_NOTA_BLOQUEADA' && a.gravacoes().length === 0, r.motivo);
+}
+{
+  const a = ambiente();
+  const sonda = `${await montarJS('sf/_comum.js', 'sf/_erp.js')}
+    const out = {};
+    for (const e of ['Parceiro', 'CabecalhoNota', 'ItemNota', 'Outra']) { try { await erpSalvar(e, { CODEMP: 1 }, 'X'); out[e] = 'PASSOU'; } catch (x) { out[e] = x.codigo; } }
+    try { await erpChamar('ServicoQualquer.confirmarNota', {}); out.c = 'PASSOU'; } catch (x) { out.c = x.codigo; }
+    return out;`;
+  const r = await a.rodar(sonda);
+  conf('liberado: porta unica recusa o que nao e titulo e a confirmacao', r.Parceiro === 'ENTIDADE_NAO_LIBERADA' && r.Outra === 'ENTIDADE_NAO_LIBERADA' && r.CabecalhoNota === 'CRIACAO_NOTA_BLOQUEADA' && r.ItemNota === 'CRIACAO_NOTA_BLOQUEADA' && r.c === 'CONFIRMACAO_PROIBIDA' && a.gravacoes().length === 0, JSON.stringify(r));
+}
+
 // B7. Prova inversa: as travas sao independentes e o teste enxerga gravacao.
 const ligada = (c) => { const n = c.replace('const GRAVACAO_ERP_HABILITADA = false;', 'const GRAVACAO_ERP_HABILITADA = true;'); if (n === c) throw new Error('nao achei a trava no codigo'); return n; };
 const ambasLigadas = (c) => { const n = ligada(c).replace('const CRIACAO_NOTA_HABILITADA = false;', 'const CRIACAO_NOTA_HABILITADA = true;'); if (n === ligada(c)) throw new Error('nao achei a trava de nota'); return n; };
@@ -392,7 +430,7 @@ for (const [nome, sql] of Object.entries(SQL_ALTERADAS)) conf(`${nome}: publicad
 
 const comAdaptador = [...publicadas.entries()].filter(([, p]) => p.tipo === 'JAVASCRIPT' && /SLUG_ERP/.test(p.code));
 conf('toda SF com o adaptador esta na lista da Fase 0', comAdaptador.every(([n]) => JS_COM_ERP[n]), comAdaptador.filter(([n]) => !JS_COM_ERP[n]).map(([n]) => n).join(', '));
-conf('toda SF com o adaptador tem a trava desligada', comAdaptador.every(([, p]) => /^const GRAVACAO_ERP_HABILITADA = false;$/m.test(p.code)));
+conf('toda SF com o adaptador so libera titulo financeiro', comAdaptador.every(([, p]) => /^const ENTIDADES_GRAVAVEIS = \['Financeiro'\];$/m.test(p.code) && /^const CRIACAO_NOTA_HABILITADA = false;$/m.test(p.code) && /^const CORRECAO_CADASTRO_HABILITADA = false;$/m.test(p.code)));
 const foraDaPorta = [...publicadas.entries()].filter(([, p]) => p.tipo === 'JAVASCRIPT' && (ocorrencias(p.code, /connection:\s*SLUG_ERP/g) > 1 || /connection:\s*['"]sankhya['"]/.test(p.code) || /saveRecord/.test(p.code.replace(/const EP_SALVAR = .*\n/, '').replace(/'CRUDServiceProvider\.saveRecord'/g, ''))));
 conf('nenhuma SF publicada chama o ERP por fora da porta unica', foraDaPorta.length === 0, foraDaPorta.map(([n]) => n).join(', '));
 
@@ -429,10 +467,7 @@ if (VIVO && totalFalhas()) {
   const iso = await abrirIsolamento();
   const l = await criarLancamentoTeste({ cnpj: cnpjFicticio(), tipoCodigo: 'BOLETO', valor: 1.23 });
   try {
-    const real = await ex('enviarLancamentoParaErp', { lancamentoId: l.lancamentoId });
-    conf('envio real publicado recusa com GRAVACAO_BLOQUEADA', real.ok === false && real.motivo === 'GRAVACAO_BLOQUEADA', real.motivo);
-    const hostil = await ex('enviarLancamentoParaErp', { lancamentoId: l.lancamentoId, simular: 'N', GRAVACAO_ERP_HABILITADA: true, forcar: true });
-    conf('envio real com entrada hostil recusa igual', hostil.ok === false && hostil.motivo === 'GRAVACAO_BLOQUEADA', hostil.motivo);
+    // Sem envio real aqui: a gravacao esta ligada e este teste nunca toca a producao.
     const corrigir = await ex('corrigirCadastroErp', { lancamentoId: l.lancamentoId, acao: 'MARCAR_FORNECEDOR', codparc: 0 });
     conf('correcao de cadastro publicada recusa', corrigir.ok === false && corrigir.motivo === 'GRAVACAO_BLOQUEADA', corrigir.motivo);
     const criar = await ex('corrigirCadastroErp', { lancamentoId: l.lancamentoId, acao: 'CRIAR_PARCEIRO' });

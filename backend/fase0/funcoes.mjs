@@ -1,6 +1,6 @@
 // Fase 0: o codigo esperado de cada SF que alcanca o ERP, montado dos mesmos arquivos-fonte
 // que os scripts add-*.mjs usam. aplicar.mjs publica isto; o smoke compara o publicado com isto.
-import { montarJS, lerSF, NONCE } from '../lib/base.mjs';
+import { montarJS, lerSF, NONCE, garantirPerfis } from '../lib/base.mjs';
 
 const BASE = ['sf/_comum.js', 'sf/_erp.js'];
 const MOTOR = `const leitura = (function () { ${lerSF('robo/leitura.cjs').replace('module.exports =', 'return')}\n })();`;
@@ -48,7 +48,10 @@ export const JS_COM_ERP = {
 
 // Indicadores da Caixa de entrada: o robo deixou de lancar; conta o que ficou pronto para conferencia.
 // podeConferirNfe: mesmo alcance por tipo das telas (secao 13.1), para o tipo NOTA_FISCAL.
+const { Administrador: PERFIL_ADMIN_ENVIO, Aprovador: PERFIL_APROVADOR_ENVIO } = await garantirPerfis();
+const PERFIS_ENVIO = `${Number(PERFIL_ADMIN_ENVIO)},${Number(PERFIL_APROVADOR_ENVIO)}`;
 export const SQL_ALTERADAS = {
+  podeEnviarErp: `SELECT CASE WHEN EXISTS (SELECT 1 FROM INT_PROFILEUSER PU WHERE PU.USERID = :VAR_USER AND FIND_IN_SET(PU.PROFILEID, '${PERFIS_ENVIO}')) THEN 1 ELSE 0 END AS PODE FROM DUAL WHERE ${NONCE}`,
   podeConferirNfe: `SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM PERMISSOES_USUARIO PU WHERE PU.USUARIO_ID = :VAR_USER AND PU.TODOS_OS_TIPOS = FALSE)
      OR EXISTS (SELECT 1 FROM PERMISSAO_TIPO_DOCUMENTO PT JOIN TIPOS_DOCUMENTO T ON T.ID = PT.TIPO_DOCUMENTO_ID WHERE PT.USUARIO_ID = :VAR_USER AND T.CODIGO = 'NOTA_FISCAL')
      THEN 1 ELSE 0 END AS PODE FROM DUAL WHERE ${NONCE}`,

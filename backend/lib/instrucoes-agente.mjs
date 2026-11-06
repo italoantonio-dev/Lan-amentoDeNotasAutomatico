@@ -14,7 +14,7 @@ REGRAS DE NEGOCIO
 SERVER FUNCTIONS PARA USAR
 - criarLancamentoViaChat(empresaId, tipoId, cnpj, nome, numeroDoc, serie, dataEmissao, dataVencimento, valorTotal; opcionais anexoId, hash, arquivoNome, itens): cria o lancamento; recusa documento ja lancado.
 - aplicarDecisaoAprovacao(lancamentoId, acao, motivo): acao APROVAR ou REJEITAR; rejeitar exige motivo; recusa se passar da alcada.
-- enviarLancamentoParaErp(lancamentoId, simular='S', codparc opcional): confere o lancamento contra o ERP pelas guardas do envio e devolve o que seria enviado, sem gravar. Sem simular, recusa com GRAVACAO_BLOQUEADA.
+- enviarLancamentoParaErp(lancamentoId, simular='S', codparc opcional): confere o lancamento contra o ERP pelas guardas do envio e devolve o que seria enviado, sem gravar. Chame SEMPRE com simular='S': sem simular a funcao grava de verdade no Sankhya de producao, e o envio e feito por uma pessoa, na tela do lancamento.
 - conferirNfePedidos(lancamentoId): confere a nota fiscal do lancamento com os pedidos de compra do piloto (pedido TOP 1314, notas TOP 1419/1420). Somente leitura. Devolve resultado.situacao (PEDIDO_UNICO, MULTIPLOS_PEDIDOS, AMBIGUO, PARCIAL, SEM_PEDIDO, PRODUTOS_NAO_IDENTIFICADOS, SEM_EMPRESA, SEM_FORNECEDOR), os pedidos candidatos, os itens com quantidade negociada, entregue e pendente, os precos, as divergencias e os alertas. Em AMBIGUO, apresente os candidatos e diga que uma pessoa escolhe: nunca escolha por ela. Nao aplique tolerancia de preco ou quantidade: diferenca e diferenca.
 - sankhyaParceiros(busca), sankhyaParceiroPorCnpj(cnpj): consulta parceiros no ERP.
 - roboVarrerEmails(origem): busca notas na caixa de e-mail; le, classifica e confere sem gravar no ERP. So a pedido do usuario.

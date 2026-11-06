@@ -70,7 +70,7 @@ try {
   // Destino NOTA neste cenario: conferir e so leitura e vale em qualquer situacao; o envio real recusa.
   conf('revisao de leitura: nota so e conferida, sem gravar', barrado.entidade === 'CorrespondenciaPedido' || barrado.motivo === 'CONFERENCIA_FALHOU', barrado.motivo ?? barrado.entidade);
   const barradoReal = await ex('enviarLancamentoParaErp', { lancamentoId: abaixo.lancamentoId });
-  conf('revisao de leitura nao vai ao ERP', barradoReal.ok === false && barradoReal.motivo === 'GRAVACAO_BLOQUEADA', barradoReal.motivo);
+  conf('revisao de leitura nao vai ao ERP', barradoReal.ok === false && barradoReal.motivo === 'CRIACAO_NOTA_BLOQUEADA', barradoReal.motivo);
 
   const fila = await rows('roboListarAnexos', { decisao: '', limite: 30, offset: 0 });
   conf('tudo aparece na caixa de entrada', fila.filter((a) => a.NOME.startsWith(MARCA)).length >= 6);

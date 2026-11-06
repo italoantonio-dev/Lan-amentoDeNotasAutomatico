@@ -2,9 +2,9 @@ import { useCallback, useState } from 'react';
 import { execSF, SF } from '../lib/api';
 import { getMitraErrorMessage } from '../lib/utils';
 
-// Fase 0: so controla o que a tela oferece. Quem bloqueia de verdade e o backend (sf/_erp.js):
-// mudar esta linha sozinha nao grava nada.
-export const GRAVACAO_ERP_LIBERADA = false as boolean;
+// So controla o que a tela oferece. Quem libera ou bloqueia de verdade e o backend (sf/_erp.js).
+export const GRAVACAO_ERP_LIBERADA = true as boolean;
+export const CORRECAO_CADASTRO_LIBERADA = false as boolean;
 
 interface Candidato { codparc: number; nome: string; fornecedor: boolean }
 interface Conferencia { destino?: string; entidade?: string; campos?: Record<string, unknown>; parceiro?: { codparc: number; origem: string; nome?: string }; correspondencia?: { resumo: string } & Record<string, unknown>; origemDocumento?: string }

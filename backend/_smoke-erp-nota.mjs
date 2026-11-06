@@ -22,7 +22,7 @@ try {
   const conferencia = await ex('enviarLancamentoParaErp', { lancamentoId: n.lancamentoId, simular: 'S' });
   conf('conferencia de nota vai para a correspondencia com pedidos', conferencia.ok === true && conferencia.entidade === 'CorrespondenciaPedido' && Boolean(conferencia.correspondencia.situacao), conferencia.mensagem);
   const real = await ex('enviarLancamentoParaErp', { lancamentoId: n.lancamentoId });
-  conf('envio real de nota recusa', real.ok === false && real.motivo === 'GRAVACAO_BLOQUEADA', real.motivo);
+  conf('envio real de nota recusa', real.ok === false && real.motivo === 'CRIACAO_NOTA_BLOQUEADA', real.motivo);
   const situacao = await uma('obterLancamento', { id: n.lancamentoId });
   conf('recusa nao muda a situacao do lancamento', situacao.STATUS === 'APROVADO', situacao.STATUS);
   conf('nada entrou no registro de envios', (await envios()) === enviosAntes);

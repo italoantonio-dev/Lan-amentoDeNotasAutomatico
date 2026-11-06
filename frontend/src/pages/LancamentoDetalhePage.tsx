@@ -97,6 +97,8 @@ export default function LancamentoDetalhePage() {
   const podeCorrigir = !enviado && !parcial && ['REVISAO_LEITURA', 'AGUARDANDO_APROVACAO', 'APROVADO', 'ERRO'].includes(status);
   const mensagemRecusa = envio.recusa?.mensagem ?? (status === 'ERRO' && ultimoEnvio?.STATUS === 'ERRO' ? String(ultimoEnvio.MENSAGEM ?? '') : '');
   const rot = rotulosDoTipo(String(l?.TIPO ?? ''));
+  // Nota fiscal nao tem caminho de gravacao: continua so com a conferencia.
+  const gravaNoErp = GRAVACAO_ERP_LIBERADA && l?.TIPO !== 'NOTA_FISCAL';
 
   async function decidir(acao: 'APROVAR' | 'REJEITAR') {
     setOcupado(true);
@@ -110,7 +112,7 @@ export default function LancamentoDetalhePage() {
 
   async function enviarAgora(codparc?: number) {
     setConfirmaEnvio(false);
-    if (!GRAVACAO_ERP_LIBERADA) {
+    if (!gravaNoErp) {
       const c = await envio.conferir(codparc);
       if (c.ok) addToast('success', c.jaEnviado ? c.mensagem ?? 'Já enviado.' : 'Conferência concluída. Nada foi gravado no ERP.');
       return;
@@ -255,19 +257,20 @@ export default function LancamentoDetalhePage() {
           )}
 
           <Card>
-            <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">{GRAVACAO_ERP_LIBERADA ? 'Enviar ao ERP' : 'Conferir para o ERP'}</h2></div>
+            <div className="px-5 py-4 border-b border-border-subtle"><h2 className="text-[14px] font-medium text-fg">{gravaNoErp ? 'Enviar ao ERP' : 'Conferir para o ERP'}</h2></div>
             <div className="px-5 py-5 flex flex-col gap-3">
-              {!GRAVACAO_ERP_LIBERADA && !enviado && !parcial && <p className="text-[13px] text-fg-muted">A gravação no ERP está desligada nesta fase. A conferência só lê o Sankhya e mostra o que seria enviado.</p>}
+              {!gravaNoErp && !enviado && !parcial && <p className="text-[13px] text-fg-muted">Nota fiscal não é gravada no ERP por aqui. A conferência só lê o Sankhya e mostra o que seria enviado.</p>}
               {enviado && <p className="text-[13.5px] text-fg">Gravado no ERP. Chave <strong className="font-semibold tabular-nums">{envios.find((e) => e.STATUS === 'OK')?.CHAVE_ERP}</strong>.</p>}
               {parcial && <Aviso tipo="danger">A nota entrou no ERP com itens faltando. Reenviar criaria uma segunda nota: a correção é dentro do Sankhya.</Aviso>}
-              {!enviado && !parcial && !podeEnviar && <p className="text-[13px] text-fg-muted">{status === 'AGUARDANDO_APROVACAO' ? `${GRAVACAO_ERP_LIBERADA ? 'O envio' : 'A conferência'} fica disponível depois da aprovação.` : status === 'REVISAO_LEITURA' ? `${GRAVACAO_ERP_LIBERADA ? 'O envio' : 'A conferência'} fica disponível depois da conferência da leitura.` : 'Lançamento rejeitado não vai ao ERP.'}</p>}
-              {GRAVACAO_ERP_LIBERADA && podeEnviar && !mensagemRecusa && !envio.candidatos && (
+              {!enviado && !parcial && !podeEnviar && <p className="text-[13px] text-fg-muted">{status === 'AGUARDANDO_APROVACAO' ? `${gravaNoErp ? 'O envio' : 'A conferência'} fica disponível depois da aprovação.` : status === 'REVISAO_LEITURA' ? `${gravaNoErp ? 'O envio' : 'A conferência'} fica disponível depois da conferência da leitura.` : 'Lançamento rejeitado não vai ao ERP.'}</p>}
+              {gravaNoErp && podeEnviar && !mensagemRecusa && !envio.candidatos && (
                 <>
-                  <p className="text-[13px] text-fg-muted">Gravar no ERP é irreversível. Confira os dados antes de enviar.</p>
+                  <p className="text-[13px] text-fg-muted">Gravar no ERP é irreversível e vale na produção do Sankhya. Confira os dados antes de enviar.</p>
+                  <Button variant="secondary" disabled={envio.enviando} onClick={() => envio.conferir()}><SearchCheck size={16} /> Conferir sem gravar</Button>
                   <Button disabled={envio.enviando} onClick={() => setConfirmaEnvio(true)}><Send size={16} /> {envio.enviando ? 'Enviando...' : 'Enviar ao ERP'}</Button>
                 </>
               )}
-              {!GRAVACAO_ERP_LIBERADA && podeEnviar && !mensagemRecusa && !envio.candidatos && (
+              {!gravaNoErp && podeEnviar && !mensagemRecusa && !envio.candidatos && (
                 <Button variant="secondary" disabled={envio.enviando} onClick={() => enviarAgora()}><SearchCheck size={16} /> {envio.enviando ? 'Conferindo...' : 'Conferir sem gravar'}</Button>
               )}
               {envio.conferencia?.correspondencia && (
@@ -296,7 +299,7 @@ export default function LancamentoDetalhePage() {
                       <span className="block text-[12px] text-fg-muted">{c.fornecedor ? 'Fornecedor no ERP' : 'Não marcado como fornecedor'}</span>
                     </button>
                   ))}
-                  <Button disabled={!escolha || envio.enviando} onClick={() => enviarAgora(Number(escolha))}><Send size={16} /> {GRAVACAO_ERP_LIBERADA ? 'Enviar para este parceiro' : 'Conferir com este parceiro'}</Button>
+                  <Button disabled={!escolha || envio.enviando} onClick={() => enviarAgora(Number(escolha))}><Send size={16} /> {gravaNoErp ? 'Enviar para este parceiro' : 'Conferir com este parceiro'}</Button>
                 </div>
               )}
               {envio.recusa?.motivo === 'CRIACAO_NOTA_BLOQUEADA' && !envio.candidatos && <Aviso tipo="info">{envio.recusa.mensagem}</Aviso>}
@@ -341,7 +344,7 @@ export default function LancamentoDetalhePage() {
       </div>
 
       <ConfirmDialog isOpen={confirmaEnvio} onClose={() => setConfirmaEnvio(false)} onConfirm={() => enviarAgora()} title="Enviar ao ERP" confirmLabel="Gravar no ERP" loading={envio.enviando}
-        message={`Grava ${formatarMoeda(l.VALOR_TOTAL)} de ${l.NOME_FORNECEDOR || 'fornecedor sem nome'} no Sankhya. Esta ação não pode ser desfeita por aqui.`} />
+        message={`Grava ${formatarMoeda(l.VALOR_TOTAL)} de ${l.NOME_FORNECEDOR || 'fornecedor sem nome'} no Sankhya de produção. Esta ação não pode ser desfeita por aqui.`} />
       <ConfirmDialog isOpen={confirmaExclusao} onClose={() => setConfirmaExclusao(false)} onConfirm={excluir} title="Excluir lançamento" confirmLabel="Excluir" loading={ocupado}
         message="Apaga o lançamento, os itens, a trilha e o documento deste sistema. O mesmo arquivo poderá entrar de novo." />
 

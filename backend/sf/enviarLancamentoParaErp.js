@@ -18,6 +18,11 @@ const destino = d.DESTINO_ERP || d.DESTINO_PADRAO || 'FINANCEIRO';
 if (!simular && !GRAVACAO_ERP_HABILITADA) {
   return recusar('GRAVACAO_BLOQUEADA', 'Gravação no ERP desligada nesta fase: nada foi enviado ao Sankhya. Use "Conferir sem gravar" para ver o que seria enviado.');
 }
+// Gravar em producao: so Administrador ou Aprovador, conferido no servidor.
+if (!simular) {
+  const pode = await uma(SF.podeEnviarErp, {});
+  if (!pode || Number(pode.PODE) !== 1) return recusar('SEM_PERMISSAO', 'Só o Administrador ou o Aprovador envia ao ERP.');
+}
 // Nota de entrada. Conferir e somente leitura: compara a NF-e com os pedidos de compra. Criar a
 // nota esta bloqueado (temporario, CRIACAO_NOTA_HABILITADA); o caminho previsto e faturar o pedido
 // existente e salvar a nota NAO confirmada, com servico oficial homologado. Confirmar e sempre manual.
